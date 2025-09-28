@@ -21,98 +21,98 @@ on:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/credentials.json
 
         steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+          - name: Checkout code
+            uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.9"
+          - name: Set up Python
+            uses: actions/setup-python@v4
+            with:
+              python-version: "3.9"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyyaml
+          - name: Install dependencies
+            run: |
+              python -m pip install --upgrade pip
+              pip install pyyaml
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+          - name: Set up Cloud SDK
+            uses: google-github-actions/setup-gcloud@v2
 
-      - name: Authenticate to Google Cloud
-        run: |
-          echo '${{ secrets.PERSONAL_GCP_CREDENTIALS }}' > /tmp/credentials.json
-          gcloud config set project konecta-task-1-hands-on
+          - name: Authenticate to Google Cloud
+            run: |
+              echo '${{ secrets.PERSONAL_GCP_CREDENTIALS }}' > /tmp/credentials.json
+              gcloud config set project konecta-task-1-hands-on
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.6.0
+          - name: Setup Terraform
+            uses: hashicorp/setup-terraform@v3
+            with:
+              terraform_version: 1.6.0
 
-      - name: Get YAML files to process
-        id: yaml-files
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "files=${{ github.event.inputs.yaml_file }}" >> $GITHUB_OUTPUT
-          else
-            # Find all YAML files in configs directory
-            echo "files=$(find configs -name '*.yaml' -o -name '*.yml' | tr '\n' ' ')" >> $GITHUB_OUTPUT
-          fi
+          - name: Get YAML files to process
+            id: yaml-files
+            run: |
+              if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                echo "files=${{ github.event.inputs.yaml_file }}" >> $GITHUB_OUTPUT
+              else
+                # Find all YAML files in configs directory
+                echo "files=$(find configs -name '*.yaml' -o -name '*.yml' | tr '\n' ' ')" >> $GITHUB_OUTPUT
+              fi
 
-      - name: Deploy infrastructure
-        run: |
-          for file in ${{ steps.yaml-files.outputs.files }}; do
-            if [ -f "$file" ]; then
-              echo "🚀 Deploying infrastructure for: $file"
-              python scripts/deploy.py "$file"
-            fi
-          done
+          - name: Deploy infrastructure
+            run: |
+              for file in ${{ steps.yaml-files.outputs.files }}; do
+                if [ -f "$file" ]; then
+                  echo "🚀 Deploying infrastructure for: $file"
+                  python scripts/deploy.py "$file"
+                fi
+              done
 
-      - name: Send Slack Notification on Success
-        if: success()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: success
-          channel: "#infrastructure"
-          text: |
-            🚀 **Infrastructure Deployed Successfully!**
+          - name: Send Slack Notification on Success
+            if: success()
+            uses: 8398a7/action-slack@v3
+            with:
+              status: success
+              channel: "#infrastructure"
+              text: |
+                🚀 **Infrastructure Deployed Successfully!**
 
-            **Repository:** ${{ github.repository }}
-            **Branch:** ${{ github.ref_name }}
-            **Commit:** ${{ github.sha }}
-            **Files:** ${{ steps.yaml-files.outputs.files }}
-            **Actor:** ${{ github.actor }}
-            **Time:** ${{ github.event.head_commit.timestamp }}
+                **Repository:** ${{ github.repository }}
+                **Branch:** ${{ github.ref_name }}
+                **Commit:** ${{ github.sha }}
+                **Files:** ${{ steps.yaml-files.outputs.files }}
+                **Actor:** ${{ github.actor }}
+                **Time:** ${{ github.event.head_commit.timestamp }}
 
-            View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+                View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-      - name: Send Slack Notification on Failure
-        if: failure()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: failure
-          channel: "#infrastructure"
-          text: |
-            ❌ **Infrastructure Deployment Failed!**
+          - name: Send Slack Notification on Failure
+            if: failure()
+            uses: 8398a7/action-slack@v3
+            with:
+              status: failure
+              channel: "#infrastructure"
+              text: |
+                ❌ **Infrastructure Deployment Failed!**
 
-            **Repository:** ${{ github.repository }}
-            **Branch:** ${{ github.ref_name }}
-            **Commit:** ${{ github.sha }}
-            **Files:** ${{ steps.yaml-files.outputs.files }}
-            **Actor:** ${{ github.actor }}
+                **Repository:** ${{ github.repository }}
+                **Branch:** ${{ github.ref_name }}
+                **Commit:** ${{ github.sha }}
+                **Files:** ${{ steps.yaml-files.outputs.files }}
+                **Actor:** ${{ github.actor }}
 
-            View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+                View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-      - name: Notify on Success
-        if: success()
-        run: |
-          echo "✅ Infrastructure deployment completed successfully!"
-          echo "Files: ${{ steps.yaml-files.outputs.files }}"
-          echo "::notice::Infrastructure deployed successfully for: ${{ steps.yaml-files.outputs.files }}"
+          - name: Notify on Success
+            if: success()
+            run: |
+              echo "✅ Infrastructure deployment completed successfully!"
+              echo "Files: ${{ steps.yaml-files.outputs.files }}"
+              echo "::notice::Infrastructure deployed successfully for: ${{ steps.yaml-files.outputs.files }}"
 
-      - name: Notify on Failure
-        if: failure()
-        run: |
-          echo "❌ Infrastructure deployment failed!"
-          echo "Files: ${{ steps.yaml-files.outputs.files }}"
-          echo "::error::Infrastructure deployment failed for: ${{ steps.yaml-files.outputs.files }}"
+          - name: Notify on Failure
+            if: failure()
+            run: |
+              echo "❌ Infrastructure deployment failed!"
+              echo "Files: ${{ steps.yaml-files.outputs.files }}"
+              echo "::error::Infrastructure deployment failed for: ${{ steps.yaml-files.outputs.files }}"
