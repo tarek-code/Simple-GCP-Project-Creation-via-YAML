@@ -2,7 +2,7 @@ name: Infrastructure Deploy
 
 # Workflow to deploy infrastructure when commit contains 'deploy'
 on:
-  # Trigger on any push for testing
+  # Trigger on push when commit message contains 'deploy'
   push:
     branches:
       - main
@@ -17,6 +17,7 @@ on:
 jobs:
   infrastructure:
     runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, 'deploy')
     env:
       GOOGLE_APPLICATION_CREDENTIALS: /tmp/credentials.json
 
