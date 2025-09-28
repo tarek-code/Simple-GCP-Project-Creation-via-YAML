@@ -68,46 +68,17 @@ jobs:
 
           - name: Send Slack Notification on Success
             if: success()
-            uses: 8398a7/action-slack@v3
-            with:
-              status: success
-              channel: "#infrastructure"
-              text: |
-                🚀 **Infrastructure Deployed Successfully!**
-
-                **Repository:** ${{ github.repository }}
-                **Branch:** ${{ github.ref_name }}
-                **Commit:** ${{ github.sha }}
-                **Files:** ${{ steps.yaml-files.outputs.files }}
-                **Actor:** ${{ github.actor }}
-                **Time:** ${{ github.event.head_commit.timestamp }}
-
-                View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-              custom_payload: |
-                {
-                  "webhook_url": "${{ secrets.SLACK_WEBHOOK_URL }}"
-                }
+            run: |
+              curl -X POST -H 'Content-type: application/json' \
+                --data '{"text":"🚀 **Infrastructure Deployed Successfully!**\n\n**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}\n**Files:** ${{ steps.yaml-files.outputs.files }}\n**Actor:** ${{ github.actor }}\n\nView the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"}' \
+                ${{ secrets.SLACK_WEBHOOK_URL }}
 
           - name: Send Slack Notification on Failure
             if: failure()
-            uses: 8398a7/action-slack@v3
-            with:
-              status: failure
-              channel: "#infrastructure"
-              text: |
-                ❌ **Infrastructure Deployment Failed!**
-
-                **Repository:** ${{ github.repository }}
-                **Branch:** ${{ github.ref_name }}
-                **Commit:** ${{ github.sha }}
-                **Files:** ${{ steps.yaml-files.outputs.files }}
-                **Actor:** ${{ github.actor }}
-
-                View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-              custom_payload: |
-                {
-                  "webhook_url": "${{ secrets.SLACK_WEBHOOK_URL }}"
-                }
+            run: |
+              curl -X POST -H 'Content-type: application/json' \
+                --data '{"text":"❌ **Infrastructure Deployment Failed!**\n\n**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}\n**Files:** ${{ steps.yaml-files.outputs.files }}\n**Actor:** ${{ github.actor }}\n\nView the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"}' \
+                ${{ secrets.SLACK_WEBHOOK_URL }}
 
           - name: Notify on Success
             if: success()
