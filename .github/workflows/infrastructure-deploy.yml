@@ -2,15 +2,8 @@ name: Infrastructure Deploy
 
 # Workflow to deploy infrastructure when commit contains 'deploy'
 on:
-  # Trigger on YAML file changes with deploy in commit message
+  # Trigger on any push for testing
   push:
-    paths:
-      - "configs/**"
-    branches:
-      - main
-  pull_request:
-    paths:
-      - "configs/**"
     branches:
       - main
   # Manual trigger
@@ -24,7 +17,6 @@ on:
 jobs:
   infrastructure:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, 'deploy')
 
     steps:
       - name: Checkout code
@@ -53,16 +45,9 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "files=${{ github.event.inputs.yaml_file }}" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            # Use a safer approach for git diff
-            if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-              echo "files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.(yaml|yml)$' | grep '^configs/' | tr '\n' ' ')" >> $GITHUB_OUTPUT
-            else
-              # Fallback: check all YAML files in configs directory
-              echo "files=$(find configs -name '*.yaml' -o -name '*.yml' | tr '\n' ' ')" >> $GITHUB_OUTPUT
-            fi
           else
-            echo "files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(yaml|yml)$' | grep '^configs/' | tr '\n' ' ')" >> $GITHUB_OUTPUT
+            # Find all YAML files in configs directory
+            echo "files=$(find configs -name '*.yaml' -o -name '*.yml' | tr '\n' ' ')" >> $GITHUB_OUTPUT
           fi
 
       - name: Deploy infrastructure
