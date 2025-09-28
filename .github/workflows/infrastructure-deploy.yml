@@ -57,24 +57,24 @@ jobs:
             echo "files=$(find configs -name '*.yaml' -o -name '*.yml' | tr '\n' ' ')" >> $GITHUB_OUTPUT
           fi
 
-      # - name: Deploy infrastructure
-      #   run: |
-      #     for file in ${{ steps.yaml-files.outputs.files }}; do
-      #       if [ -f "$file" ]; then
-      #         echo "🚀 Deploying infrastructure for: $file"
-      #         python scripts/deploy.py "$file"
-      #       fi
-      #     done
+      - name: Deploy infrastructure
+        run: |
+          for file in ${{ steps.yaml-files.outputs.files }}; do
+            if [ -f "$file" ]; then
+              echo "🚀 Deploying infrastructure for: $file"
+              python scripts/deploy.py "$file"
+            fi
+          done
 
       - name: Send Slack Notification on Success
-        
+        if: success()
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data '{"text":"🚀 Infrastructure Deployed Successfully! Repository: ${{ github.repository }} Branch: ${{ github.ref_name }} Commit: ${{ github.sha }} Files: ${{ steps.yaml-files.outputs.files }} Actor: ${{ github.actor }}"}' \
             ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Send Slack Notification on Failure
-       
+        if: failure()
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data '{"text":"❌ Infrastructure Deployment Failed! Repository: ${{ github.repository }} Branch: ${{ github.ref_name }} Commit: ${{ github.sha }} Files: ${{ steps.yaml-files.outputs.files }} Actor: ${{ github.actor }}"}' \
