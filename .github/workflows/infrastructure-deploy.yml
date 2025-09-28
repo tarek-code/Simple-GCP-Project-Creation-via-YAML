@@ -1,5 +1,6 @@
 name: Infrastructure Deploy
 
+# Workflow to deploy infrastructure when commit contains 'deploy'
 on:
   # Trigger on YAML file changes with deploy in commit message
   push:
