@@ -66,42 +66,48 @@ jobs:
             fi
           done
 
-      - name: Send Slack Notification on Success
-        if: success()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: success
-          channel: "#infrastructure"
-          text: |
-            🚀 **Infrastructure Deployed Successfully!**
+          - name: Send Slack Notification on Success
+            if: success()
+            uses: 8398a7/action-slack@v3
+            with:
+              status: success
+              channel: "#infrastructure"
+              text: |
+                🚀 **Infrastructure Deployed Successfully!**
 
-            **Repository:** ${{ github.repository }}
-            **Branch:** ${{ github.ref_name }}
-            **Commit:** ${{ github.sha }}
-            **Files:** ${{ steps.yaml-files.outputs.files }}
-            **Actor:** ${{ github.actor }}
-            **Time:** ${{ github.event.head_commit.timestamp }}
+                **Repository:** ${{ github.repository }}
+                **Branch:** ${{ github.ref_name }}
+                **Commit:** ${{ github.sha }}
+                **Files:** ${{ steps.yaml-files.outputs.files }}
+                **Actor:** ${{ github.actor }}
+                **Time:** ${{ github.event.head_commit.timestamp }}
 
-            View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+                View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              custom_payload: |
+                {
+                  "webhook_url": "${{ secrets.SLACK_WEBHOOK_URL }}"
+                }
 
-      - name: Send Slack Notification on Failure
-        if: failure()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: failure
-          channel: "#infrastructure"
-          text: |
-            ❌ **Infrastructure Deployment Failed!**
+          - name: Send Slack Notification on Failure
+            if: failure()
+            uses: 8398a7/action-slack@v3
+            with:
+              status: failure
+              channel: "#infrastructure"
+              text: |
+                ❌ **Infrastructure Deployment Failed!**
 
-            **Repository:** ${{ github.repository }}
-            **Branch:** ${{ github.ref_name }}
-            **Commit:** ${{ github.sha }}
-            **Files:** ${{ steps.yaml-files.outputs.files }}
-            **Actor:** ${{ github.actor }}
+                **Repository:** ${{ github.repository }}
+                **Branch:** ${{ github.ref_name }}
+                **Commit:** ${{ github.sha }}
+                **Files:** ${{ steps.yaml-files.outputs.files }}
+                **Actor:** ${{ github.actor }}
 
-            View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+                View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              custom_payload: |
+                {
+                  "webhook_url": "${{ secrets.SLACK_WEBHOOK_URL }}"
+                }
 
       - name: Notify on Success
         if: success()
