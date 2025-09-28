@@ -109,16 +109,16 @@ jobs:
                   "webhook_url": "${{ secrets.SLACK_WEBHOOK_URL }}"
                 }
 
-      - name: Notify on Success
-        if: success()
-        run: |
-          echo "✅ Infrastructure deployment completed successfully!"
-          echo "Files: ${{ steps.yaml-files.outputs.files }}"
-          echo "::notice::Infrastructure deployed successfully for: ${{ steps.yaml-files.outputs.files }}"
+          - name: Notify on Success
+            if: success()
+            run: |
+              echo "✅ Infrastructure deployment completed successfully!"
+              echo "Files: ${{ steps.yaml-files.outputs.files }}"
+              echo "::notice::Infrastructure deployed successfully for: ${{ steps.yaml-files.outputs.files }}"
 
-      - name: Notify on Failure
-        if: failure()
-        run: |
-          echo "❌ Infrastructure deployment failed!"
-          echo "Files: ${{ steps.yaml-files.outputs.files }}"
-          echo "::error::Infrastructure deployment failed for: ${{ steps.yaml-files.outputs.files }}"
+          - name: Notify on Failure
+            if: failure()
+            run: |
+              echo "❌ Infrastructure deployment failed!"
+              echo "Files: ${{ steps.yaml-files.outputs.files }}"
+              echo "::error::Infrastructure deployment failed for: ${{ steps.yaml-files.outputs.files }}"
