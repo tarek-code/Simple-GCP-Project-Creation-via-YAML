@@ -32,10 +32,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyyaml
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GIT_ACTION_GCP }}
+          - name: Authenticate to Google Cloud
+            uses: google-github-actions/auth@v2
+            with:
+              credentials_json: ${{ secrets.PERSONAL_GCP_CREDENTIALS }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
