@@ -1,17 +1,15 @@
 name: Infrastructure Deploy
 
 on:
-  # Trigger on YAML file changes
+  # Trigger on YAML file changes with deploy in commit message
   push:
     paths:
-      - "configs/*.yaml"
-      - "configs/*.yml"
+      - "configs/**"
     branches:
       - main
   pull_request:
     paths:
-      - "configs/*.yaml"
-      - "configs/*.yml"
+      - "configs/**"
     branches:
       - main
   # Manual trigger
@@ -25,6 +23,7 @@ on:
 jobs:
   infrastructure:
     runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, 'deploy')
 
     steps:
       - name: Checkout code
@@ -60,7 +59,6 @@ jobs:
           fi
 
       - name: Deploy infrastructure
-        if: steps.yaml-files.outputs.files != ''
         run: |
           for file in ${{ steps.yaml-files.outputs.files }}; do
             if [ -f "$file" ]; then
@@ -70,7 +68,7 @@ jobs:
           done
 
       - name: Send Slack Notification on Success
-        if: success() && steps.yaml-files.outputs.files != ''
+        if: success()
         uses: 8398a7/action-slack@v3
         with:
           status: success
@@ -89,7 +87,7 @@ jobs:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Send Slack Notification on Failure
-        if: failure() && steps.yaml-files.outputs.files != ''
+        if: failure()
         uses: 8398a7/action-slack@v3
         with:
           status: failure
@@ -107,7 +105,7 @@ jobs:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Send Email Notification on Success
-        if: success() && steps.yaml-files.outputs.files != ''
+        if: success()
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -130,7 +128,7 @@ jobs:
             View the workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
       - name: Send Email Notification on Failure
-        if: failure() && steps.yaml-files.outputs.files != ''
+        if: failure()
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
