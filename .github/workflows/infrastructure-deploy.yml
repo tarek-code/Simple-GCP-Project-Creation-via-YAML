@@ -57,39 +57,39 @@ jobs:
             echo "files=$(find configs -name '*.yaml' -o -name '*.yml' | tr '\n' ' ')" >> $GITHUB_OUTPUT
           fi
 
-      - name: Deploy infrastructure
+      # - name: Deploy infrastructure
+      #   run: |
+      #     for file in ${{ steps.yaml-files.outputs.files }}; do
+      #       if [ -f "$file" ]; then
+      #         echo "🚀 Deploying infrastructure for: $file"
+      #         python scripts/deploy.py "$file"
+      #       fi
+      #     done
+
+      - name: Send Slack Notification on Success
+        if: success() && secrets.SLACK_WEBHOOK_URL != ''
         run: |
-          for file in ${{ steps.yaml-files.outputs.files }}; do
-            if [ -f "$file" ]; then
-              echo "🚀 Deploying infrastructure for: $file"
-              python scripts/deploy.py "$file"
-            fi
-          done
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"🚀 Infrastructure Deployed Successfully! Repository: ${{ github.repository }} Branch: ${{ github.ref_name }} Commit: ${{ github.sha }} Files: ${{ steps.yaml-files.outputs.files }} Actor: ${{ github.actor }}"}' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
 
-          - name: Send Slack Notification on Success
-            if: success()
-            run: |
-              curl -X POST -H 'Content-type: application/json' \
-                --data '{"text":"🚀 **Infrastructure Deployed Successfully!**\n\n**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}\n**Files:** ${{ steps.yaml-files.outputs.files }}\n**Actor:** ${{ github.actor }}\n\nView the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"}' \
-                ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: Send Slack Notification on Failure
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"❌ Infrastructure Deployment Failed! Repository: ${{ github.repository }} Branch: ${{ github.ref_name }} Commit: ${{ github.sha }} Files: ${{ steps.yaml-files.outputs.files }} Actor: ${{ github.actor }}"}' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
 
-          - name: Send Slack Notification on Failure
-            if: failure()
-            run: |
-              curl -X POST -H 'Content-type: application/json' \
-                --data '{"text":"❌ **Infrastructure Deployment Failed!**\n\n**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}\n**Files:** ${{ steps.yaml-files.outputs.files }}\n**Actor:** ${{ github.actor }}\n\nView the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"}' \
-                ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: Notify on Success
+        if: success()
+        run: |
+          echo "✅ Infrastructure deployment completed successfully!"
+          echo "Files: ${{ steps.yaml-files.outputs.files }}"
+          echo "::notice::Infrastructure deployed successfully for: ${{ steps.yaml-files.outputs.files }}"
 
-          - name: Notify on Success
-            if: success()
-            run: |
-              echo "✅ Infrastructure deployment completed successfully!"
-              echo "Files: ${{ steps.yaml-files.outputs.files }}"
-              echo "::notice::Infrastructure deployed successfully for: ${{ steps.yaml-files.outputs.files }}"
-
-          - name: Notify on Failure
-            if: failure()
-            run: |
-              echo "❌ Infrastructure deployment failed!"
-              echo "Files: ${{ steps.yaml-files.outputs.files }}"
-              echo "::error::Infrastructure deployment failed for: ${{ steps.yaml-files.outputs.files }}"
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "❌ Infrastructure deployment failed!"
+          echo "Files: ${{ steps.yaml-files.outputs.files }}"
+          echo "::error::Infrastructure deployment failed for: ${{ steps.yaml-files.outputs.files }}"
