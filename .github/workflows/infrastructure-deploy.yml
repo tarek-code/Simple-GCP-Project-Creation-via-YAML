@@ -60,7 +60,7 @@ jobs:
           done
 
       - name: Send Slack Notification on Success
-        if: success() && secrets.SLACK_WEBHOOK_URL != ''
+        if: success()
         uses: 8398a7/action-slack@v3
         with:
           status: success
@@ -79,7 +79,7 @@ jobs:
           webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Send Slack Notification on Failure
-        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
+        if: failure()
         uses: 8398a7/action-slack@v3
         with:
           status: failure
