@@ -1,0 +1,166 @@
+name: Infrastructure Deploy
+
+on:
+  # Trigger on YAML file changes
+  push:
+    paths:
+      - "configs/*.yaml"
+      - "configs/*.yml"
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "configs/*.yaml"
+      - "configs/*.yml"
+    branches:
+      - main
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      yaml_file:
+        description: "YAML file to deploy"
+        required: true
+        default: "configs/example-project.yaml"
+
+jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml requests
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GIT_ACTION_GCP }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get YAML files to process
+        id: yaml-files
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "files=${{ github.event.inputs.yaml_file }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            echo "files=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.(yaml|yml)$' | grep '^configs/' | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          else
+            echo "files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(yaml|yml)$' | grep '^configs/' | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy infrastructure
+        if: steps.yaml-files.outputs.files != ''
+        run: |
+          for file in ${{ steps.yaml-files.outputs.files }}; do
+            if [ -f "$file" ]; then
+              echo "🚀 Deploying infrastructure for: $file"
+              python scripts/deploy.py "$file"
+            fi
+          done
+
+      - name: Send Slack Notification on Success
+        if: success() && steps.yaml-files.outputs.files != ''
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          channel: "#infrastructure"
+          text: |
+            🚀 **Infrastructure Deployed Successfully!**
+
+            **Repository:** ${{ github.repository }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            **Files:** ${{ steps.yaml-files.outputs.files }}
+            **Actor:** ${{ github.actor }}
+            **Time:** ${{ github.event.head_commit.timestamp }}
+
+            View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Send Slack Notification on Failure
+        if: failure() && steps.yaml-files.outputs.files != ''
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: "#infrastructure"
+          text: |
+            ❌ **Infrastructure Deployment Failed!**
+
+            **Repository:** ${{ github.repository }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            **Files:** ${{ steps.yaml-files.outputs.files }}
+            **Actor:** ${{ github.actor }}
+
+            View the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Send Email Notification on Success
+        if: success() && steps.yaml-files.outputs.files != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Infrastructure Deployed Successfully - ${{ github.repository }}"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: GitHub Actions
+          body: |
+            Infrastructure has been successfully deployed!
+
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Files: ${{ steps.yaml-files.outputs.files }}
+            Actor: ${{ github.actor }}
+            Time: ${{ github.event.head_commit.timestamp }}
+
+            View the workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Send Email Notification on Failure
+        if: failure() && steps.yaml-files.outputs.files != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "❌ Infrastructure Deployment Failed - ${{ github.repository }}"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: GitHub Actions
+          body: |
+            Infrastructure deployment has failed!
+
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Files: ${{ steps.yaml-files.outputs.files }}
+            Actor: ${{ github.actor }}
+
+            View the workflow run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Notify on Success
+        if: success()
+        run: |
+          echo "✅ Infrastructure deployment completed successfully!"
+          echo "Files: ${{ steps.yaml-files.outputs.files }}"
+          echo "::notice::Infrastructure deployed successfully for: ${{ steps.yaml-files.outputs.files }}"
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "❌ Infrastructure deployment failed!"
+          echo "Files: ${{ steps.yaml-files.outputs.files }}"
+          echo "::error::Infrastructure deployment failed for: ${{ steps.yaml-files.outputs.files }}"
