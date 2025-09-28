@@ -1,9 +1,9 @@
 # Example project configuration
-project_id: "dev-intern-poc-test12"
+project_id: "dev-intern-poc-test13"
 # Existing Organization ID (optional) if not provided, the project will be created in the root organization
 organization_id: null
-# Existing Billing Account ID
-billing_account: "01783B-A7A65B-153181"
+# Existing Billing Account ID (null for personal accounts)
+billing_account: null
 
 labels:
   owner: "intern"
