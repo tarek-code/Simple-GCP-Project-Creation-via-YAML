@@ -1,3 +1,4 @@
+#for usage cd to this location and python deploy.py ../configs/example-project.yaml
 import yaml
 import json
 import subprocess
