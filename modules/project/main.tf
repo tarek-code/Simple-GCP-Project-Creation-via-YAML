@@ -1,7 +1,7 @@
 resource "google_project" "project" {
   project_id      = var.project_id
   name            = var.project_id
-  org_id          = var.organization_id
+  org_id          = var.organization_id != null ? var.organization_id : null
   billing_account = var.billing_account
   labels          = var.labels
 }

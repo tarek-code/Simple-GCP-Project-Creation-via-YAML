@@ -1,6 +1,9 @@
+# Example project configuration
 project_id: "dev-intern-poc"
-organization_id: "YOUR_ORG_ID"
-billing_account: "XXXXXX-XXXXXX-XXXXXX"
+# Existing Organization ID
+organization_id: null
+# Existing Billing Account ID
+billing_account: "01783B-A7A65B-153181"
 
 labels:
   owner: "intern"

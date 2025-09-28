@@ -4,8 +4,8 @@ variable "project_id" {
 }
 
 variable "organization_id" {
-  description = "The organization ID the project will belong to"
-  type        = string
+  type    = string
+  default = null
 }
 
 variable "billing_account" {
