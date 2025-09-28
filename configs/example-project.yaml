@@ -1,0 +1,11 @@
+project_id: "dev-intern-poc"
+organization_id: "YOUR_ORG_ID"
+billing_account: "XXXXXX-XXXXXX-XXXXXX"
+
+labels:
+  owner: "intern"
+  environment: "test"
+
+apis:
+  - compute.googleapis.com
+  - iam.googleapis.com
