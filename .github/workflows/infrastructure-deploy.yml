@@ -14,11 +14,13 @@ on:
         required: true
         default: "configs/example-project.yaml"
 
-jobs:
-  infrastructure:
-    runs-on: ubuntu-latest
+    jobs:
+      infrastructure:
+        runs-on: ubuntu-latest
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/credentials.json
 
-    steps:
+        steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -38,7 +40,6 @@ jobs:
       - name: Authenticate to Google Cloud
         run: |
           echo '${{ secrets.PERSONAL_GCP_CREDENTIALS }}' > /tmp/credentials.json
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/credentials.json
           gcloud config set project konecta-task-1-hands-on
 
       - name: Setup Terraform
