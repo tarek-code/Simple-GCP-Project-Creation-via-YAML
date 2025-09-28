@@ -39,7 +39,6 @@ jobs:
         run: |
           echo '${{ secrets.PERSONAL_GCP_CREDENTIALS }}' > /tmp/credentials.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/credentials.json
-          gcloud auth login --cred-file=/tmp/credentials.json
           gcloud config set project konecta-task-1-hands-on
 
       - name: Setup Terraform
