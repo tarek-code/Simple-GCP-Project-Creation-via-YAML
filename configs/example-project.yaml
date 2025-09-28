@@ -1,6 +1,6 @@
 # Example project configuration
 project_id: "dev-intern-poc"
-# Existing Organization ID
+# Existing Organization ID (optional) if not provided, the project will be created in the root organization
 organization_id: null
 # Existing Billing Account ID
 billing_account: "01783B-A7A65B-153181"
