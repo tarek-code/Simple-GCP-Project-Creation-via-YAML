@@ -19,8 +19,8 @@ def write_tfvars_json(data: dict, target_path: str) -> str:
 def rel(from_dir: str, to_path: str) -> str:
     return os.path.relpath(to_path, start=from_dir).replace("\\", "/")
 
-def write_minimal_root_tf(run_dir: str, module_source_rel: str) -> None:
-    """Create minimal Terraform root files in run_dir that call the given module source path for project creation."""
+def write_minimal_root_tf(run_dir: str, module_source_rel: str, include_project_module: bool) -> None:
+    """Create minimal Terraform root files in run_dir. Optionally include the project module."""
     required = (
         "terraform {\n"
         "  required_providers {\n"
@@ -33,15 +33,27 @@ def write_minimal_root_tf(run_dir: str, module_source_rel: str) -> None:
         "provider \"google\" {\n"
         "  project = var.project_id\n"
         "}\n\n"
-        f"module \"project\" {{\n"
-        f"  source          = \"{module_source_rel}\"\n"
-        f"  project_id      = var.project_id\n"
-        f"  organization_id = var.organization_id\n"
-        f"  billing_account = var.billing_account\n"
-        f"  labels          = var.labels\n"
-        f"  apis            = var.apis\n"
-        f"}}\n"
     )
+    if include_project_module:
+        required += (
+            f"module \"project\" {{\n"
+            f"  source          = \"{module_source_rel}\"\n"
+            f"  project_id      = var.project_id\n"
+            f"  organization_id = var.organization_id\n"
+            f"  billing_account = var.billing_account\n"
+            f"  labels          = var.labels\n"
+            f"  apis            = var.apis\n"
+            f"}}\n"
+        )
+    else:
+        # If project exists, still allow API enablement without module
+        required += (
+            "resource \"google_project_service\" \"enabled_apis\" {\n"
+            "  for_each = toset(var.apis)\n"
+            "  project  = var.project_id\n"
+            "  service  = each.value\n"
+            "}\n"
+        )
 
     variables = (
         "variable \"project_id\" {\n"
@@ -387,19 +399,22 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
 
     return "\n".join(blocks)
 
-def run_terraform_in_dir(run_dir: str, tfvars_path: str, project_id: str) -> None:
+def run_terraform_in_dir(run_dir: str, tfvars_path: str, project_id: str, has_project_module: bool) -> None:
     cwd_before = os.getcwd()
     try:
         os.chdir(run_dir)
         print(f"[INFO] Running Terraform in: {run_dir}")
         subprocess.run(["terraform", "init"], check=True)
-        # Phase 1: plan for project + APIs only
-        print("[INFO] Phase 1: Plan project and APIs (-target=module.project)")
-        subprocess.run([
-            "terraform", "plan",
-            "-target=module.project",
-            "-var-file", tfvars_path,
-        ], check=True)
+        # Phase 1: plan project/APIs if module present
+        if has_project_module:
+            print("[INFO] Phase 1: Plan project and APIs (-target=module.project)")
+            subprocess.run([
+                "terraform", "plan",
+                "-target=module.project",
+                "-var-file", tfvars_path,
+            ], check=True)
+        else:
+            print("[INFO] Phase 1: Project exists; skipping targeted plan.")
         # Phase 2: full plan for remaining resources
         print("[INFO] Phase 2: Full plan for remaining resources")
         subprocess.run([
@@ -411,13 +426,14 @@ def run_terraform_in_dir(run_dir: str, tfvars_path: str, project_id: str) -> Non
         answer = input(f"Apply changes for project '{project_id}'? (yes/no): ")
         if answer.strip().lower() in ("yes", "y"):
             print("[INFO] Proceeding to apply...")
-            # Phase 1 apply: project and APIs
-            subprocess.run([
-                "terraform", "apply",
-                "-target=module.project",
-                "-var-file", tfvars_path,
-                "-auto-approve",
-            ], check=True)
+            # Phase 1 apply: project and APIs (only if module present)
+            if has_project_module:
+                subprocess.run([
+                    "terraform", "apply",
+                    "-target=module.project",
+                    "-var-file", tfvars_path,
+                    "-auto-approve",
+                ], check=True)
             # Phase 2 apply: remaining resources
             subprocess.run([
                 "terraform", "apply",
@@ -494,9 +510,20 @@ def main():
         run_dir = os.path.join(runs_root, project_id)
         os.makedirs(run_dir, exist_ok=True)
 
-        # Always use core project module for project creation
+        # Detect if project exists to decide whether to include project module
         module_source_rel = rel(run_dir, os.path.join(project_root, "modules", "project"))
-        write_minimal_root_tf(run_dir, module_source_rel)
+        project_exists = False
+        try:
+            subprocess.run([
+                "gcloud", "projects", "describe", project_id,
+                "--format=value(projectId)"
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            project_exists = True
+            print(f"[INFO] Project '{project_id}' already exists; will not include project module.")
+        except Exception:
+            print(f"[INFO] Project '{project_id}' not found; will include project module to create it.")
+
+        write_minimal_root_tf(run_dir, module_source_rel, include_project_module=not project_exists)
 
         # Append resource modules based on YAML
         modules_hcl = build_module_blocks(run_dir, project_root, data)
@@ -510,7 +537,7 @@ def main():
         write_tfvars_json(data, tfvars_path)
 
         # Execute terraform plan, then optionally apply for this run
-        run_terraform_in_dir(run_dir, tfvars_path, project_id)
+        run_terraform_in_dir(run_dir, tfvars_path, project_id, has_project_module=not project_exists)
 
 if __name__ == "__main__":
     main()
