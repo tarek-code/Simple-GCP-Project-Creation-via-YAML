@@ -95,6 +95,8 @@ def write_minimal_root_tf(run_dir: str, module_source_rel: str, include_project_
 def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
     resources = data.get("resources", {}) or {}
     blocks: List[str] = []
+    # Track modules created to wire dependencies
+    subnet_name_to_module: dict = {}
 
     def mod_source(name: str) -> str:
         return rel(run_dir, os.path.join(project_root, "modules", name))
@@ -145,6 +147,8 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"}}\n",
             ])
         )
+        # map subnet name -> module address
+        subnet_name_to_module[sn['name']] = f"module.subnet_{i}"
 
     # Firewall rules
     for i, fw in enumerate(resources.get("firewall_rules", []) or [], start=1):
@@ -278,21 +282,27 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
 
     # Compute instances (VMs)
     for i, vm in enumerate(resources.get("compute_instances", []) or [], start=1):
-        blocks.append(
-            "\n".join([
-                f"module \"compute_instance_{i}\" {{",
-                f"  source   = \"{mod_source('compute_instance')}\"",
-                f"  project_id   = var.project_id",
-                f"  name         = \"{vm['name']}\"",
-                f"  zone         = \"{vm.get('zone', 'us-central1-a')}\"",
-                f"  machine_type = \"{vm.get('machine_type', 'e2-micro')}\"",
-                f"  image        = \"{vm.get('image', 'debian-cloud/debian-11')}\"",
-                f"  subnetwork   = {json.dumps(vm.get('subnetwork'))}",
-                f"  create_public_ip = {str(vm.get('create_public_ip', False)).lower()}",
-                f"  tags = {json.dumps(vm.get('tags', []))}",
-                f"}}\n",
-            ])
-        )
+        depends_lines: List[str] = []
+        vm_subnet = vm.get('subnetwork')
+        if isinstance(vm_subnet, str) and vm_subnet in subnet_name_to_module:
+            # ensure VM waits for the subnet module
+            depends_lines.append(f"  depends_on = [ {subnet_name_to_module[vm_subnet]} ]")
+
+        block_lines = [
+            f"module \"compute_instance_{i}\" {{",
+            f"  source   = \"{mod_source('compute_instance')}\"",
+            f"  project_id   = var.project_id",
+            f"  name         = \"{vm['name']}\"",
+            f"  zone         = \"{vm.get('zone', 'us-central1-a')}\"",
+            f"  machine_type = \"{vm.get('machine_type', 'e2-micro')}\"",
+            f"  image        = \"{vm.get('image', 'debian-cloud/debian-11')}\"",
+            f"  subnetwork   = {json.dumps(vm.get('subnetwork'))}",
+            f"  create_public_ip = {str(vm.get('create_public_ip', False)).lower()}",
+            f"  tags = {json.dumps(vm.get('tags', []))}",
+        ]
+        block_lines.extend(depends_lines)
+        block_lines.append("}\n")
+        blocks.append("\n".join(block_lines))
 
     # BigQuery datasets
     for i, ds in enumerate(resources.get("bigquery_datasets", []) or [], start=1):

@@ -1,0 +1,19 @@
+project_id: dev-intern-poc
+labels:
+  environment: dev
+  owner: intern
+apis:
+  - run.googleapis.com
+  - compute.googleapis.com
+resources:
+  vpc:
+    name: vpc-run
+  subnets:
+    - name: subnet-run
+      region: us-central1
+      ip_cidr_range: 10.20.0.0/24
+      network: vpc-run
+  cloud_run_services:
+    - name: hello-run
+      location: us-central1
+      image: nginxinc/nginx-unprivileged:stable-alpine

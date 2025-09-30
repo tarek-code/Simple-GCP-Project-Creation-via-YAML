@@ -1,0 +1,11 @@
+project_id: dev-intern-poc
+labels:
+  environment: dev
+  owner: intern
+apis:
+  - run.googleapis.com
+resources:
+  cloud_run_services:
+    - name: hello-run
+      location: us-central1
+      image: nginxinc/nginx-unprivileged:stable-alpine
