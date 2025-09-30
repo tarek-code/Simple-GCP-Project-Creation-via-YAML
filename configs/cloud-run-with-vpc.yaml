@@ -1,4 +1,5 @@
 project_id: dev-intern-poc
+billing_account: "01783B-A7A65B-153181"
 labels:
   environment: dev
   owner: intern
@@ -25,4 +26,4 @@ resources:
       image: nginxinc/nginx-unprivileged:stable-alpine
       allow_unauthenticated: true
       vpc_connector: run-connector
-      egress: ALL_TRAFFIC
+      egress: all-traffic

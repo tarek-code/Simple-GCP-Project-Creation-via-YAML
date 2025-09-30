@@ -9,7 +9,7 @@ resource "google_cloud_run_service" "service" {
         {},
         var.vpc_connector == null ? {} : {
           "run.googleapis.com/vpc-access-connector" = var.vpc_connector
-          "run.googleapis.com/vpc-access-egress"    = coalesce(var.egress, "ALL_TRAFFIC")
+          "run.googleapis.com/vpc-access-egress"    = coalesce(var.egress, "all")
         }
       )
     }

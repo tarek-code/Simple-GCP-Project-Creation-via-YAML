@@ -97,6 +97,7 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
     blocks: List[str] = []
     # Track modules created to wire dependencies
     subnet_name_to_module: dict = {}
+    vpc_connector_name_to_module: dict = {}
 
     def mod_source(name: str) -> str:
         return rel(run_dir, os.path.join(project_root, "modules", name))
@@ -225,6 +226,13 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
             lines.append(f"  vpc_connector = \"{cr['vpc_connector']}\"")
         if 'egress' in cr and cr['egress']:
             lines.append(f"  egress = \"{cr['egress']}\"")
+        # depends_on wiring to ensure connector exists before Cloud Run
+        dep = None
+        vc_name = cr.get('vpc_connector')
+        if vc_name:
+            # capture module name if it will be created below
+            # will add after connector loop
+            dep = vc_name
         lines.append("}\n")
         blocks.append("\n".join(lines))
 
@@ -427,6 +435,23 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"}}\n",
             ])
         )
+        vpc_connector_name_to_module[c['name']] = f"module.serverless_vpc_connector_{i}"
+
+    # After defining connectors, append depends_on to Cloud Run blocks that reference one
+    if resources.get("cloud_run_services"):
+        updated_blocks: List[str] = []
+        for block in blocks:
+            if block.startswith("module \"cloud_run_") and "vpc_connector = \"" in block:
+                # extract connector name
+                import re
+                m = re.search(r"vpc_connector = \"([^\"]+)\"", block)
+                if m:
+                    name = m.group(1)
+                    if name in vpc_connector_name_to_module:
+                        # inject depends_on before closing brace
+                        block = block.replace("}\n", f"  depends_on = [ {vpc_connector_name_to_module[name]} ]\n}}\n")
+            updated_blocks.append(block)
+        blocks = updated_blocks
 
     return "\n".join(blocks)
 
