@@ -4,19 +4,21 @@ resource "google_cloud_run_service" "service" {
   location = var.location
 
   template {
+    metadata {
+      annotations = merge(
+        {},
+        var.vpc_connector == null ? {} : {
+          "run.googleapis.com/vpc-access-connector" = var.vpc_connector
+          "run.googleapis.com/vpc-access-egress"    = coalesce(var.egress, "ALL_TRAFFIC")
+        }
+      )
+    }
     spec {
       containers {
         image = var.image
         ports {
           name           = "http1"
           container_port = 8080
-        }
-      }
-      dynamic "vpc_access" {
-        for_each = var.vpc_connector == null ? [] : [1]
-        content {
-          connector = var.vpc_connector
-          egress    = var.egress
         }
       }
     }
