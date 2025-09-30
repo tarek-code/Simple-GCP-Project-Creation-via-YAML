@@ -5,6 +5,7 @@ labels:
 apis:
   - run.googleapis.com
   - compute.googleapis.com
+  - vpcaccess.googleapis.com
 resources:
   vpc:
     name: vpc-run
@@ -13,7 +14,15 @@ resources:
       region: us-central1
       ip_cidr_range: 10.20.0.0/24
       network: vpc-run
+  serverless_vpc_connectors:
+    - name: run-connector
+      region: us-central1
+      network: vpc-run
+      ip_cidr_range: 10.8.0.0/28
   cloud_run_services:
     - name: hello-run
       location: us-central1
       image: nginxinc/nginx-unprivileged:stable-alpine
+      allow_unauthenticated: true
+      vpc_connector: run-connector
+      egress: ALL_TRAFFIC

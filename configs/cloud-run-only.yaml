@@ -9,3 +9,4 @@ resources:
     - name: hello-run
       location: us-central1
       image: nginxinc/nginx-unprivileged:stable-alpine
+      allow_unauthenticated: true

@@ -211,17 +211,22 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
 
     # Cloud Run
     for i, cr in enumerate(resources.get("cloud_run_services", []) or [], start=1):
-        blocks.append(
-            "\n".join([
-                f"module \"cloud_run_{i}\" {{",
-                f"  source   = \"{mod_source('cloud_run')}\"",
-                f"  project_id = var.project_id",
-                f"  name     = \"{cr['name']}\"",
-                f"  location = \"{cr.get('location', 'us-central1')}\"",
-                f"  image    = \"{cr['image']}\"",
-                f"}}\n",
-            ])
-        )
+        lines = [
+            f"module \"cloud_run_{i}\" {{",
+            f"  source   = \"{mod_source('cloud_run')}\"",
+            f"  project_id = var.project_id",
+            f"  name     = \"{cr['name']}\"",
+            f"  location = \"{cr.get('location', 'us-central1')}\"",
+            f"  image    = \"{cr['image']}\"",
+        ]
+        if 'allow_unauthenticated' in cr:
+            lines.append(f"  allow_unauthenticated = {str(bool(cr['allow_unauthenticated'])).lower()}")
+        if 'vpc_connector' in cr and cr['vpc_connector']:
+            lines.append(f"  vpc_connector = \"{cr['vpc_connector']}\"")
+        if 'egress' in cr and cr['egress']:
+            lines.append(f"  egress = \"{cr['egress']}\"")
+        lines.append("}\n")
+        blocks.append("\n".join(lines))
 
     # Cloud SQL
     for i, cs in enumerate(resources.get("cloud_sql_instances", []) or [], start=1):
@@ -404,6 +409,21 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  connect_mode   = \"{r.get('connect_mode', 'DIRECT_PEERING')}\"",
                 f"  authorized_network = {json.dumps(r.get('authorized_network'))}",
                 f"  labels = {json.dumps(r.get('labels', {}))}",
+                f"}}\n",
+            ])
+        )
+
+    # Serverless VPC connectors
+    for i, c in enumerate(resources.get("serverless_vpc_connectors", []) or [], start=1):
+        blocks.append(
+            "\n".join([
+                f"module \"serverless_vpc_connector_{i}\" {{",
+                f"  source    = \"{mod_source('serverless_vpc_connector')}\"",
+                f"  project_id = var.project_id",
+                f"  name       = \"{c['name']}\"",
+                f"  region     = \"{c['region']}\"",
+                f"  network    = \"{c['network']}\"",
+                f"  ip_cidr_range = \"{c['ip_cidr_range']}\"",
                 f"}}\n",
             ])
         )
