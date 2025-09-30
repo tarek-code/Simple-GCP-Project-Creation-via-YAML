@@ -437,7 +437,22 @@ def run_terraform_in_dir(run_dir: str, tfvars_path: str, project_id: str, has_pr
                         "-auto-approve",
                     ], check=True)
                 except subprocess.CalledProcessError as e:
-                    print("[WARN] Targeted apply for project module failed. Assuming project may already exist; continuing with full apply.")
+                    print("[WARN] Targeted apply for project module failed (likely exists). Switching to existing-project mode and continuing.")
+                    # Rewrite module block to force create_project=false, then re-plan
+                    try:
+                        main_tf_path = os.path.join(run_dir, "main.tf")
+                        with open(main_tf_path, "r", encoding="utf-8") as mf:
+                            content = mf.read()
+                        if "create_project" in content:
+                            content = content.replace("create_project  = true", "create_project  = false")
+                        else:
+                            content = content.replace("apis            = var.apis\n}", "apis            = var.apis\n  create_project  = false\n}")
+                        with open(main_tf_path, "w", encoding="utf-8") as mf:
+                            mf.write(content)
+                        # Re-plan after switching mode
+                        subprocess.run(["terraform", "plan", "-var-file", tfvars_path], check=True)
+                    except Exception as ee:
+                        print(f"[WARN] Could not rewrite main.tf to disable project creation: {ee}")
             # Phase 2 apply: remaining resources
             subprocess.run([
                 "terraform", "apply",

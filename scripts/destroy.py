@@ -78,14 +78,73 @@ def run_destroy_for_project(project_id: str, auto_approve: bool) -> None:
     try:
         os.chdir(run_dir)
         print(f"[INFO] Destroying project '{project_id}' in: {run_dir}")
-        cmd = [
+
+        def terraform_state_list() -> List[str]:
+            try:
+                out = subprocess.check_output(["terraform", "state", "list"], text=True)
+                return [line.strip() for line in out.splitlines() if line.strip()]
+            except subprocess.CalledProcessError:
+                return []
+
+        def destroy_targets(addresses: List[str]) -> None:
+            if not addresses:
+                return
+            cmd = ["terraform", "destroy", "-var-file", tfvars]
+            if auto_approve:
+                cmd.append("-auto-approve")
+            # add each target
+            for addr in addresses:
+                cmd.extend(["-target", addr])
+            print(f"[INFO] Running targeted destroy for {len(addresses)} address(es)...")
+            subprocess.run(cmd, check=True)
+
+        # Phase 0: make sure we're initialized (in case of fresh shell)
+        subprocess.run(["terraform", "init", "-input=false"], check=True)
+
+        # Phase 1: Destroy compute instances first (to free subnets/networks)
+        state_addrs = terraform_state_list()
+        vm_addrs = [a for a in state_addrs if ".google_compute_instance." in a]
+        if vm_addrs:
+            print(f"[INFO] Found {len(vm_addrs)} compute instance(s) to destroy first")
+            destroy_targets(vm_addrs)
+        else:
+            print("[INFO] No compute instances found in state; skipping targeted VM destroy")
+
+        # Phase 2: Destroy other dependent items that commonly block networks
+        state_addrs = terraform_state_list()
+        blockers = []
+        for needle in (
+            ".google_compute_router.",
+            ".google_compute_router_nat.",
+            ".google_compute_firewall.",
+            ".google_compute_forwarding_rule.",
+            ".google_compute_address.",
+        ):
+            blockers.extend([a for a in state_addrs if needle in a])
+        if blockers:
+            print(f"[INFO] Destroying {len(blockers)} network-dependent resource(s) before full destroy")
+            destroy_targets(blockers)
+
+        # Phase 3: Full destroy, serialized to reduce race conditions
+        full_cmd = [
             "terraform", "destroy",
             "-var-file", tfvars,
+            "-parallelism=1",
         ]
         if auto_approve:
-            cmd.append("-auto-approve")
-        print(f"[INFO] Running: {' '.join(cmd)}")
-        subprocess.run(cmd, check=True)
+            full_cmd.append("-auto-approve")
+        print(f"[INFO] Running: {' '.join(full_cmd)}")
+        try:
+            subprocess.run(full_cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            print("[WARN] Full destroy failed once. Waiting 10s and retrying once...")
+            try:
+                import time
+                time.sleep(10)
+            except Exception:
+                pass
+            subprocess.run(full_cmd, check=True)
+
         print(f"[INFO] ✅ Destroy completed for {project_id}")
     finally:
         os.chdir(cwd_before)
