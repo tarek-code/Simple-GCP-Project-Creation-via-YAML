@@ -281,6 +281,110 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
             ])
         )
 
+    # BigQuery datasets
+    for i, ds in enumerate(resources.get("bigquery_datasets", []) or [], start=1):
+        blocks.append(
+            "\n".join([
+                f"module \"bigquery_dataset_{i}\" {{",
+                f"  source    = \"{mod_source('bigquery_dataset')}\"",
+                f"  project_id = var.project_id",
+                f"  dataset_id = \"{ds['dataset_id']}\"",
+                f"  location   = \"{ds.get('location', 'US')}\"",
+                f"  labels     = {json.dumps(ds.get('labels', {}))}",
+                f"}}\n",
+            ])
+        )
+
+    # Cloud Functions (Gen2)
+    for i, fn in enumerate(resources.get("cloud_functions", []) or [], start=1):
+        blocks.append(
+            "\n".join([
+                f"module \"cloud_function_{i}\" {{",
+                f"  source       = \"{mod_source('cloud_functions')}\"",
+                f"  project_id   = var.project_id",
+                f"  name         = \"{fn['name']}\"",
+                f"  location     = \"{fn.get('location', 'us-central1')}\"",
+                f"  description  = {json.dumps(fn.get('description'))}",
+                f"  runtime      = \"{fn['runtime']}\"",
+                f"  entry_point  = \"{fn['entry_point']}\"",
+                f"  source_bucket = \"{fn['source_bucket']}\"",
+                f"  source_object = \"{fn['source_object']}\"",
+                f"  memory       = \"{fn.get('memory', '256M')}\"",
+                f"  timeout_seconds = {int(fn.get('timeout_seconds', 60))}",
+                f"  ingress_settings = \"{fn.get('ingress_settings', 'ALLOW_ALL')}\"",
+                f"  max_instance_count = {int(fn.get('max_instance_count', 1))}",
+                f"}}\n",
+            ])
+        )
+
+    # GKE
+    if gke := resources.get("gke"):
+        blocks.append(
+            "\n".join([
+                f"module \"gke\" {{",
+                f"  source        = \"{mod_source('gke')}\"",
+                f"  project_id    = var.project_id",
+                f"  name          = \"{gke['name']}\"",
+                f"  location      = \"{gke.get('location', 'us-central1')}\"",
+                f"  node_pool_name = \"{gke.get('node_pool_name', 'default-pool')}\"",
+                f"  node_count    = {int(gke.get('node_count', 1))}",
+                f"  machine_type  = \"{gke.get('machine_type', 'e2-standard-2')}\"",
+                f"  labels        = {json.dumps(gke.get('labels', {}))}",
+                f"  tags          = {json.dumps(gke.get('tags', []))}",
+                f"}}\n",
+            ])
+        )
+
+    # Cloud Router
+    if cr := resources.get("cloud_router"):
+        blocks.append(
+            "\n".join([
+                f"module \"cloud_router\" {{",
+                f"  source    = \"{mod_source('cloud_router')}\"",
+                f"  project_id = var.project_id",
+                f"  name      = \"{cr['name']}\"",
+                f"  region    = \"{cr['region']}\"",
+                f"  network   = \"{cr['network']}\"",
+                f"}}\n",
+            ])
+        )
+
+    # Cloud NAT
+    if nat := resources.get("cloud_nat"):
+        blocks.append(
+            "\n".join([
+                f"module \"cloud_nat\" {{",
+                f"  source    = \"{mod_source('cloud_nat')}\"",
+                f"  project_id = var.project_id",
+                f"  name      = \"{nat['name']}\"",
+                f"  region    = \"{nat['region']}\"",
+                f"  router    = \"{nat['router']}\"",
+                f"  nat_ip_allocation = \"{nat.get('nat_ip_allocation', 'AUTO_ONLY')}\"",
+                f"  source_subnetwork_ip_ranges_to_nat = \"{nat.get('source_subnetwork_ip_ranges_to_nat', 'ALL_SUBNETWORKS_ALL_IP_RANGES')}\"",
+                f"}}\n",
+            ])
+        )
+
+    # Memorystore Redis
+    for i, r in enumerate(resources.get("redis_instances", []) or [], start=1):
+        blocks.append(
+            "\n".join([
+                f"module \"redis_{i}\" {{",
+                f"  source    = \"{mod_source('memorystore_redis')}\"",
+                f"  project_id = var.project_id",
+                f"  name       = \"{r['name']}\"",
+                f"  region     = \"{r.get('region', 'us-central1')}\"",
+                f"  tier       = \"{r.get('tier', 'BASIC')}\"",
+                f"  memory_size_gb = {int(r.get('memory_size_gb', 1))}",
+                f"  redis_version  = \"{r.get('redis_version', 'REDIS_6_X')}\"",
+                f"  display_name   = {json.dumps(r.get('display_name'))}",
+                f"  connect_mode   = \"{r.get('connect_mode', 'DIRECT_PEERING')}\"",
+                f"  authorized_network = {json.dumps(r.get('authorized_network'))}",
+                f"  labels = {json.dumps(r.get('labels', {}))}",
+                f"}}\n",
+            ])
+        )
+
     return "\n".join(blocks)
 
 def run_terraform_in_dir(run_dir: str, tfvars_path: str, project_id: str) -> None:

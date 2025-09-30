@@ -498,3 +498,110 @@ This project has been successfully used to:
 **Happy Deploying! 🚀**
 
 For questions or contributions, please open an issue or submit a pull request.
+
+## Supported resource modules (customizable via YAML)
+
+- Project (creation + API enablement)
+- VPC, Subnet, Firewall
+- Service Account, IAM Binding
+- Compute Instance (VM)
+- Storage Bucket
+- Pub/Sub Topic
+- Cloud Run Service
+- Cloud SQL Instance
+- Artifact Registry Repository
+- Secret Manager Secret (+ version)
+- Cloud DNS Managed Zone
+- BigQuery Dataset
+- Cloud Functions (2nd gen)
+- GKE (Google Kubernetes Engine) cluster + node pool
+- Cloud Router, Cloud NAT
+
+### YAML schema (excerpt)
+
+Add resources under `resources:` per project YAML:
+
+```yaml
+resources:
+  vpc:
+    name: "vpc-a"
+    routing_mode: "GLOBAL"
+
+  subnets:
+    - name: "subnet-a1"
+      region: "us-central1"
+      ip_cidr_range: "10.10.0.0/24"
+      network: "vpc-a"
+
+  compute_instances:
+    - name: "vm-a1"
+      zone: "us-central1-a"
+      machine_type: "e2-micro"
+      image: "debian-cloud/debian-11"
+      subnetwork: "subnet-a1"
+
+  storage_buckets:
+    - name: "my-bucket"
+      location: "US"
+      enable_versioning: true
+
+  pubsub_topics:
+    - name: "events"
+
+  cloud_run_services:
+    - name: "hello"
+      location: "us-central1"
+      image: "gcr.io/cloudrun/hello"
+
+  cloud_sql_instances:
+    - name: "sql-a"
+      database_version: "POSTGRES_14"
+      region: "us-central1"
+      tier: "db-f1-micro"
+
+  artifact_repos:
+    - name: "docker-repo"
+      location: "us"
+      format: "DOCKER"
+
+  secrets:
+    - name: "api-token"
+      value: "dummy"
+
+  dns_zones:
+    - name: "example-zone"
+      dns_name: "example.internal."
+
+  bigquery_datasets:
+    - dataset_id: "analytics"
+      location: "US"
+
+  cloud_functions:
+    - name: "fn-http"
+      location: "us-central1"
+      runtime: "python311"
+      entry_point: "main"
+      source_bucket: "code-bucket"
+      source_object: "functions/fn-http.zip"
+
+  gke:
+    name: "gke-a"
+    location: "us-central1"
+    node_pool_name: "np-a"
+    node_count: 1
+    machine_type: "e2-standard-2"
+
+  cloud_router:
+    name: "router-a"
+    region: "us-central1"
+    network: "vpc-a"
+
+  cloud_nat:
+    name: "nat-a"
+    region: "us-central1"
+    router: "router-a"
+```
+
+Notes:
+- You can declare multiple items for list-based resources (VMs, subnets, buckets, topics, datasets, functions).
+- The workflow: `deploy.py` performs plan by default and prompts to apply per project.
