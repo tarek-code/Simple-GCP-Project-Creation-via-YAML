@@ -4,6 +4,7 @@
 *.tfvars
 *.tfvars.json
 .terraform/
+.tf-runs/
 .terraform.lock.hcl
 crash.log
 crash.*.log

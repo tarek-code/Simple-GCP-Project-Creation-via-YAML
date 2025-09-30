@@ -24,3 +24,9 @@ variable "apis" {
   type        = list(string)
   default     = []
 }
+
+variable "create_project" {
+  description = "Whether to create the project or use an existing one"
+  type        = bool
+  default     = true
+}

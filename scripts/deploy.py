@@ -19,7 +19,7 @@ def write_tfvars_json(data: dict, target_path: str) -> str:
 def rel(from_dir: str, to_path: str) -> str:
     return os.path.relpath(to_path, start=from_dir).replace("\\", "/")
 
-def write_minimal_root_tf(run_dir: str, module_source_rel: str, include_project_module: bool) -> None:
+def write_minimal_root_tf(run_dir: str, module_source_rel: str, include_project_module: bool, create_project: bool) -> None:
     """Create minimal Terraform root files in run_dir. Optionally include the project module."""
     required = (
         "terraform {\n"
@@ -43,6 +43,7 @@ def write_minimal_root_tf(run_dir: str, module_source_rel: str, include_project_
             f"  billing_account = var.billing_account\n"
             f"  labels          = var.labels\n"
             f"  apis            = var.apis\n"
+            f"  create_project  = {str(create_project).lower()}\n"
             f"}}\n"
         )
     else:
@@ -428,12 +429,15 @@ def run_terraform_in_dir(run_dir: str, tfvars_path: str, project_id: str, has_pr
             print("[INFO] Proceeding to apply...")
             # Phase 1 apply: project and APIs (only if module present)
             if has_project_module:
-                subprocess.run([
-                    "terraform", "apply",
-                    "-target=module.project",
-                    "-var-file", tfvars_path,
-                    "-auto-approve",
-                ], check=True)
+                try:
+                    subprocess.run([
+                        "terraform", "apply",
+                        "-target=module.project",
+                        "-var-file", tfvars_path,
+                        "-auto-approve",
+                    ], check=True)
+                except subprocess.CalledProcessError as e:
+                    print("[WARN] Targeted apply for project module failed. Assuming project may already exist; continuing with full apply.")
             # Phase 2 apply: remaining resources
             subprocess.run([
                 "terraform", "apply",
@@ -514,16 +518,20 @@ def main():
         module_source_rel = rel(run_dir, os.path.join(project_root, "modules", "project"))
         project_exists = False
         try:
-            subprocess.run([
-                "gcloud", "projects", "describe", project_id,
+            result = subprocess.run([
+                "gcloud", "projects", "list",
+                f"--filter=projectId={project_id}",
                 "--format=value(projectId)"
-            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            project_exists = True
-            print(f"[INFO] Project '{project_id}' already exists; will not include project module.")
-        except Exception:
-            print(f"[INFO] Project '{project_id}' not found; will include project module to create it.")
+            ], check=True, capture_output=True, text=True)
+            if result.stdout.strip() == project_id:
+                project_exists = True
+                print(f"[INFO] Project '{project_id}' already exists; will not include project module.")
+            else:
+                print(f"[INFO] Project '{project_id}' not found in gcloud list; will include project module to create it.")
+        except Exception as e:
+            print(f"[WARN] Could not determine project existence via gcloud ({e}); assuming not exists.")
 
-        write_minimal_root_tf(run_dir, module_source_rel, include_project_module=not project_exists)
+        write_minimal_root_tf(run_dir, module_source_rel, include_project_module=not project_exists, create_project=not project_exists)
 
         # Append resource modules based on YAML
         modules_hcl = build_module_blocks(run_dir, project_root, data)

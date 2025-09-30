@@ -1,4 +1,5 @@
 resource "google_project" "project" {
+  count           = var.create_project ? 1 : 0
   project_id      = var.project_id
   name            = var.project_id
   org_id          = var.organization_id != null ? var.organization_id : null
@@ -10,6 +11,6 @@ resource "google_project" "project" {
 # Enable APIs
 resource "google_project_service" "enabled_apis" {
   for_each = toset(var.apis)
-  project  = google_project.project.project_id
+  project  = var.project_id
   service  = each.value
 }
