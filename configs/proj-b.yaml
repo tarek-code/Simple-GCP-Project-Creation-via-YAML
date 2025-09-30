@@ -1,0 +1,39 @@
+# Project B - Two VMs, Pub/Sub, Artifact Registry
+project_id: "dev-intern-proj-b-001"
+organization_id: null
+billing_account: "01783B-A7A65B-153181"
+
+labels:
+  owner: "intern"
+  environment: "test"
+
+apis:
+  - compute.googleapis.com
+  - iam.googleapis.com
+  - artifactregistry.googleapis.com
+  - pubsub.googleapis.com
+
+resources:
+  compute_instances:
+    - name: "vm-b1"
+      zone: "us-central1-a"
+      machine_type: "e2-micro"
+      image: "debian-cloud/debian-11"
+      subnetwork: "default"
+      create_public_ip: false
+      tags: ["internal"]
+    - name: "vm-b2"
+      zone: "us-central1-b"
+      machine_type: "e2-micro"
+      image: "debian-cloud/debian-11"
+      subnetwork: "default"
+      create_public_ip: false
+      tags: ["internal"]
+
+  artifact_repos:
+    - name: "docker-repo-b"
+      location: "us"
+      format: "DOCKER"
+
+  pubsub_topics:
+    - name: "events-b"

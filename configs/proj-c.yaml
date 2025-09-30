@@ -1,0 +1,36 @@
+# Project C - Cloud Run, Cloud SQL, Secret, DNS
+project_id: "dev-intern-proj-c-001"
+organization_id: null
+billing_account: "01783B-A7A65B-153181"
+
+labels:
+  owner: "intern"
+  environment: "stage"
+
+apis:
+  - run.googleapis.com
+  - sqladmin.googleapis.com
+  - secretmanager.googleapis.com
+  - dns.googleapis.com
+
+resources:
+  cloud_run_services:
+    - name: "hello-c"
+      location: "us-central1"
+      image: "gcr.io/cloudrun/hello"
+
+  cloud_sql_instances:
+    - name: "sql-c"
+      database_version: "POSTGRES_14"
+      region: "us-central1"
+      tier: "db-f1-micro"
+
+  secrets:
+    - name: "api-token"
+      value: "dummy-value-change-me"
+
+  dns_zones:
+    - name: "example-zone"
+      dns_name: "example.internal."
+      description: "Example internal zone"
+
