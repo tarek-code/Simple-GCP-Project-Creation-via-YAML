@@ -283,27 +283,45 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
 
     return "\n".join(blocks)
 
-def run_terraform_in_dir(run_dir: str, tfvars_path: str) -> None:
+def run_terraform_in_dir(run_dir: str, tfvars_path: str, project_id: str) -> None:
     cwd_before = os.getcwd()
     try:
         os.chdir(run_dir)
         print(f"[INFO] Running Terraform in: {run_dir}")
         subprocess.run(["terraform", "init"], check=True)
-        # Phase 1: ensure project + APIs are created/enabled
-        print("[INFO] Phase 1: Creating project and enabling APIs (-target=module.project)")
+        # Phase 1: plan for project + APIs only
+        print("[INFO] Phase 1: Plan project and APIs (-target=module.project)")
         subprocess.run([
-            "terraform", "apply",
+            "terraform", "plan",
             "-target=module.project",
             "-var-file", tfvars_path,
-            "-auto-approve",
         ], check=True)
-        # Phase 2: apply remaining resources
-        print("[INFO] Phase 2: Applying remaining resources")
+        # Phase 2: full plan for remaining resources
+        print("[INFO] Phase 2: Full plan for remaining resources")
         subprocess.run([
-            "terraform", "apply",
+            "terraform", "plan",
             "-var-file", tfvars_path,
-            "-auto-approve",
         ], check=True)
+
+        # Ask whether to apply for this project
+        answer = input(f"Apply changes for project '{project_id}'? (yes/no): ")
+        if answer.strip().lower() in ("yes", "y"):
+            print("[INFO] Proceeding to apply...")
+            # Phase 1 apply: project and APIs
+            subprocess.run([
+                "terraform", "apply",
+                "-target=module.project",
+                "-var-file", tfvars_path,
+                "-auto-approve",
+            ], check=True)
+            # Phase 2 apply: remaining resources
+            subprocess.run([
+                "terraform", "apply",
+                "-var-file", tfvars_path,
+                "-auto-approve",
+            ], check=True)
+        else:
+            print(f"[INFO] Skipped apply for project '{project_id}'.")
     finally:
         os.chdir(cwd_before)
 
@@ -387,8 +405,8 @@ def main():
         tfvars_path = os.path.join(run_dir, "terraform.tfvars.json")
         write_tfvars_json(data, tfvars_path)
 
-        # Execute terraform init/apply for this run
-        run_terraform_in_dir(run_dir, tfvars_path)
+        # Execute terraform plan, then optionally apply for this run
+        run_terraform_in_dir(run_dir, tfvars_path, project_id)
 
 if __name__ == "__main__":
     main()

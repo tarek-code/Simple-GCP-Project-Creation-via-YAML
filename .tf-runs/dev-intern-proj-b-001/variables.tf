@@ -3,9 +3,16 @@ variable "project_id" {
   type        = string
 }
 
+variable "resources" {
+  description = "Ignored placeholder to silence warnings when tfvars contains 'resources'"
+  type        = any
+  default     = null
+}
+
 variable "organization_id" {
   description = "Organization ID"
   type        = string
+  default     = null
 }
 
 variable "billing_account" {
@@ -24,4 +31,3 @@ variable "apis" {
   type        = list(string)
   default     = []
 }
-
