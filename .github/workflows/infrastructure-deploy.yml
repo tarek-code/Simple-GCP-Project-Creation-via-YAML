@@ -44,16 +44,19 @@ jobs:
         with:
           terraform_version: 1.6.0
 
+      - name: Configure ADC with personal credentials
+        env:
+          PERSONAL: ${{ secrets.PERSONAL_GCP_CREDENTIALS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CREDS="$RUNNER_TEMP/creds.json"
+          printf '%s' "$PERSONAL" > "$CREDS"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$CREDS" >> $GITHUB_ENV
+          echo "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=$CREDS" >> $GITHUB_ENV
+
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
-
-      - name: Auth to GCP
-        env:
-          GCP_SA_KEY: ${{ secrets.GIT_ACTION_GCP }}
-        if: ${{ env.GCP_SA_KEY != '' }}
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ env.GCP_SA_KEY }}
 
       - name: Parse intent and files from commit message
         id: parse
