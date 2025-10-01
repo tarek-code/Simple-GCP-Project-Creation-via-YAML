@@ -146,3 +146,35 @@ jobs:
           git add -f .tf-runs || true
           git commit -m "CI: persist tf state for ${{ steps.parse.outputs.files }} (action=${{ steps.parse.outputs.action }}, approve=${{ steps.parse.outputs.approve }})" || echo "No changes to commit"
           git push || echo "Nothing pushed"
+
+      - name: Notify Slack (success)
+        if: success()
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then exit 0; fi
+          ACTION='${{ steps.parse.outputs.action }}'
+          APPROVE='${{ steps.parse.outputs.approve }}'
+          FILES='${{ steps.parse.outputs.files }}'
+          REPO='${{ github.repository }}'
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG="✅ Infra ${ACTION} (approve=${APPROVE}) succeeded for ${FILES} in ${REPO}. <${RUN_URL}|Run details>"
+          curl -X POST -H 'Content-type: application/json' --data "{\"text\":\"${MSG//\"/\\\"}\"}" "$SLACK_WEBHOOK_URL" || true
+
+      - name: Notify Slack (failure)
+        if: failure()
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then exit 0; fi
+          ACTION='${{ steps.parse.outputs.action }}'
+          APPROVE='${{ steps.parse.outputs.approve }}'
+          FILES='${{ steps.parse.outputs.files }}'
+          REPO='${{ github.repository }}'
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG="❌ Infra ${ACTION} (approve=${APPROVE}) failed for ${FILES} in ${REPO}. <${RUN_URL}|Run details>"
+          curl -X POST -H 'Content-type: application/json' --data "{\"text\":\"${MSG//\"/\\\"}\"}" "$SLACK_WEBHOOK_URL" || true
