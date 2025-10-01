@@ -14,7 +14,7 @@ apis:
 
 resources:
   storage_buckets:
-    - name: "dev-intern-proj-a-logs"
+    - name: "dev-intern-proj-a-logs-here"
       location: "US"
       enable_versioning: true
       labels: { purpose: "logs" }

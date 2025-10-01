@@ -629,6 +629,21 @@ See examples throughout the YAML User Manual section above for concrete snippets
 - Feature coverage (for supported services): ~80% of commonly used options; ~60–70% if you consider the entire GCP feature surface across all services.
 - Module coverage (how many GCP products we have modules for): ~30–40% of GCP services (core infra and app platforms). Not yet covered are many data/ML and specialized services (e.g., Vertex AI, Dataflow/Dataproc, advanced BigQuery features, Dataplex, Pub/Sub Lite, advanced KMS/SCC/org policies, full load balancing/PSC/VPN/Interconnect, etc.).
 
+## 🧪 GitHub Actions usage (quick guide)
+
+- Commit-triggered:
+  - Plan only on changed YAMLs under `configs/`: commit message contains `deploy`
+  - Apply automatically: commit message contains `deploy yes`
+  - Destroy modules: commit message contains `destroy yes`
+  - Destroy entire project: commit message contains `destroy yes project`
+  - Note: The workflow picks YAML files from the commit diff (files changed in `configs/`). If a file didn’t change, use manual dispatch.
+
+- Manual dispatch (Actions → Infrastructure Deploy/Destroy → Run workflow):
+  - `action`: `deploy` or `destroy`
+  - `files`: space-separated YAMLs, e.g. `configs/proj-a.yaml configs/proj-b.yaml`
+  - `approve`: `yes` (apply) or `no` (plan-only)
+
+
 ## 📚 YAML User Manual
 
 This section explains exactly how to write YAML files in `configs/` to compose infrastructure using the available modules. Each YAML file represents one GCP project.
