@@ -36,14 +36,8 @@ resource "google_cloud_run_service" "service" {
             container_port = var.container_port
           }
         }
-        dynamic "command" {
-          for_each = length(var.command) == 0 ? [] : [1]
-          content  = var.command
-        }
-        dynamic "args" {
-          for_each = length(var.args) == 0 ? [] : [1]
-          content  = var.args
-        }
+        command = var.command
+        args    = var.args
       }
     }
   }

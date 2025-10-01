@@ -1,5 +1,5 @@
 # Project A - VPC, Subnet, 1 VM, Bucket
-project_id: "dev-intern-poc"
+project_id: "canvas-setup-457316-b2"
 organization_id: null
 billing_account: "01783B-A7A65B-153181"
 
@@ -13,25 +13,6 @@ apis:
   - storage.googleapis.com
 
 resources:
-  vpc:
-    name: "vpc-a"
-    routing_mode: "GLOBAL"
-
-  subnets:
-    - name: "subnet-a1"
-      region: "us-central1"
-      ip_cidr_range: "10.10.0.0/24"
-      network: "vpc-a"
-
-  compute_instances:
-    - name: "vm-a1"
-      zone: "us-central1-a"
-      machine_type: "e2-micro"
-      image: "debian-cloud/debian-11"
-      subnetwork: "subnet-a1"
-      create_public_ip: true
-      tags: ["ssh"]
-
   storage_buckets:
     - name: "dev-intern-proj-a-logs"
       location: "US"
