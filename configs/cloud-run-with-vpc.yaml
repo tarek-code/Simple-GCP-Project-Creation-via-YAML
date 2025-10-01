@@ -9,7 +9,7 @@ apis:
   - vpcaccess.googleapis.com
 resources:
   vpc:
-    name: vpc-run
+    name: vpc-runn
   subnets:
     - name: subnet-run
       region: us-central1
