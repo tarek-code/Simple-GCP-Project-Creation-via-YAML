@@ -6,6 +6,14 @@ resource "google_compute_subnetwork" "subnet" {
   network                  = var.network
   private_ip_google_access = var.private_ip_google_access
   purpose                  = var.purpose
+
+  dynamic "secondary_ip_range" {
+    for_each = var.secondary_ip_ranges
+    content {
+      range_name    = each.value.range_name
+      ip_cidr_range = each.value.ip_cidr_range
+    }
+  }
 }
 
 

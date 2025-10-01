@@ -19,4 +19,15 @@ variable "description" {
   default     = null
 }
 
+variable "record_sets" {
+  description = "List of DNS record sets: { name, type, ttl, rrdatas }"
+  type = list(object({
+    name    = string
+    type    = string
+    ttl     = number
+    rrdatas = list(string)
+  }))
+  default = []
+}
+
 

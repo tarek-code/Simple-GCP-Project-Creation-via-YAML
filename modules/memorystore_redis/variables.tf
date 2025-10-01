@@ -56,4 +56,28 @@ variable "labels" {
   default     = {}
 }
 
+variable "maintenance_policy" {
+  description = "Maintenance window: { day, start_time: { hours, minutes, seconds, nanos } }"
+  type = object({
+    day = number
+    start_time = object({
+      hours   = number
+      minutes = optional(number)
+      seconds = optional(number)
+      nanos   = optional(number)
+    })
+  })
+  default = null
+}
+
+variable "persistence_config" {
+  description = "Persistence config: { persistence_mode, rdb_snapshot_period, rdb_snapshot_start_time }"
+  type = object({
+    persistence_mode        = string
+    rdb_snapshot_period     = optional(string)
+    rdb_snapshot_start_time = optional(string)
+  })
+  default = null
+}
+
 

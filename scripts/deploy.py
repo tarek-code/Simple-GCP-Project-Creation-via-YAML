@@ -113,6 +113,14 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  location    = \"{b.get('location', 'US')}\"",
                 f"  uniform_bucket_level_access = {str(b.get('uniform_bucket_level_access', True)).lower()}",
                 f"  enable_versioning = {str(b.get('enable_versioning', False)).lower()}",
+                f"  force_destroy = {str(b.get('force_destroy', False)).lower()}",
+                f"  storage_class = {json.dumps(b.get('storage_class'))}",
+                f"  public_access_prevention = {json.dumps(b.get('public_access_prevention'))}",
+                f"  default_kms_key_name = {json.dumps(b.get('default_kms_key_name'))}",
+                f"  logging = {json.dumps(b.get('logging'))}",
+                f"  cors = {json.dumps(b.get('cors', []))}",
+                f"  lifecycle_rules = {json.dumps(b.get('lifecycle_rules', []))}",
+                f"  retention_policy = {json.dumps(b.get('retention_policy'))}",
                 f"  labels = {json.dumps(b.get('labels', {}))}",
                 f"}}\n",
             ])
@@ -145,6 +153,7 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  network        = \"{sn['network']}\"",
                 f"  private_ip_google_access = {str(sn.get('private_ip_google_access', True)).lower()}",
                 f"  purpose        = {json.dumps(sn.get('purpose'))}",
+                f"  secondary_ip_ranges = {json.dumps(sn.get('secondary_ip_ranges', []))}",
                 f"}}\n",
             ])
         )
@@ -166,6 +175,10 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  ports      = {json.dumps(fw.get('ports', ['22']))}",
                 f"  source_ranges = {json.dumps(fw.get('source_ranges', ['0.0.0.0/0']))}",
                 f"  target_tags   = {json.dumps(fw.get('target_tags', []))}",
+                f"  target_service_accounts = {json.dumps(fw.get('target_service_accounts', []))}",
+                f"  destination_ranges      = {json.dumps(fw.get('destination_ranges', []))}",
+                f"  allows = {json.dumps(fw.get('allows', []))}",
+                f"  denies = {json.dumps(fw.get('denies', []))}",
                 f"}}\n",
             ])
         )
@@ -192,7 +205,9 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  source  = \"{mod_source('iam_binding')}\"",
                 f"  project_id = var.project_id",
                 f"  role    = \"{ib['role']}\"",
-                f"  member  = \"{ib['member']}\"",
+                f"  member  = {json.dumps(ib.get('member'))}",
+                f"  members = {json.dumps(ib.get('members', []))}",
+                f"  condition = {json.dumps(ib.get('condition'))}",
                 f"}}\n",
             ])
         )
@@ -206,6 +221,7 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  project_id = var.project_id",
                 f"  name    = \"{pt['name']}\"",
                 f"  labels  = {json.dumps(pt.get('labels', {}))}",
+                f"  subscriptions = {json.dumps(pt.get('subscriptions', []))}",
                 f"}}\n",
             ])
         )
@@ -247,6 +263,18 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  database_version = \"{cs.get('database_version', 'POSTGRES_14')}\"",
                 f"  region           = \"{cs.get('region', 'us-central1')}\"",
                 f"  tier             = \"{cs.get('tier', 'db-f1-micro')}\"",
+                f"  deletion_protection = {str(cs.get('deletion_protection', False)).lower()}",
+                f"  availability_type = {json.dumps(cs.get('availability_type'))}",
+                f"  disk_size = {json.dumps(cs.get('disk_size'))}",
+                f"  disk_type = {json.dumps(cs.get('disk_type'))}",
+                f"  ipv4_enabled = {str(cs.get('ipv4_enabled', False)).lower()}",
+                f"  private_network = {json.dumps(cs.get('private_network'))}",
+                f"  authorized_networks = {json.dumps(cs.get('authorized_networks', []))}",
+                f"  backup_configuration = {json.dumps(cs.get('backup_configuration'))}",
+                f"  maintenance_window = {json.dumps(cs.get('maintenance_window'))}",
+                f"  database_flags = {json.dumps(cs.get('database_flags', []))}",
+                f"  insights_config = {json.dumps(cs.get('insights_config'))}",
+                f"  kms_key_name = {json.dumps(cs.get('kms_key_name'))}",
                 f"}}\n",
             ])
         )
@@ -275,6 +303,8 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  project_id = var.project_id",
                 f"  name    = \"{sm['name']}\"",
                 f"  value   = {json.dumps(sm.get('value', ''))}",
+                f"  replication = {json.dumps(sm.get('replication'))}",
+                f"  additional_versions = {json.dumps(sm.get('additional_versions', []))}",
                 f"}}\n",
             ])
         )
@@ -289,6 +319,7 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  name     = \"{dz['name']}\"",
                 f"  dns_name = \"{dz['dns_name']}\"",
                 f"  description = {json.dumps(dz.get('description'))}",
+                f"  record_sets = {json.dumps(dz.get('record_sets', []))}",
                 f"}}\n",
             ])
         )
@@ -367,6 +398,16 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  machine_type  = \"{gke.get('machine_type', 'e2-standard-2')}\"",
                 f"  labels        = {json.dumps(gke.get('labels', {}))}",
                 f"  tags          = {json.dumps(gke.get('tags', []))}",
+                f"  network       = {json.dumps(gke.get('network'))}",
+                f"  subnetwork    = {json.dumps(gke.get('subnetwork'))}",
+                f"  cluster_secondary_range_name  = {json.dumps(gke.get('cluster_secondary_range_name'))}",
+                f"  services_secondary_range_name = {json.dumps(gke.get('services_secondary_range_name'))}",
+                f"  enable_private_nodes = {str(gke.get('enable_private_nodes', False)).lower()}",
+                f"  master_ipv4_cidr_block = {json.dumps(gke.get('master_ipv4_cidr_block'))}",
+                f"  enable_network_policy = {str(gke.get('enable_network_policy', False)).lower()}",
+                f"  node_auto_scaling = {json.dumps(gke.get('node_auto_scaling'))}",
+                f"  node_labels = {json.dumps(gke.get('node_labels', {}))}",
+                f"  node_taints = {json.dumps(gke.get('node_taints', []))}",
                 f"}}\n",
             ])
         )
@@ -381,6 +422,10 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  name      = \"{cr['name']}\"",
                 f"  region    = \"{cr['region']}\"",
                 f"  network   = \"{cr['network']}\"",
+                f"  asn       = {json.dumps(cr.get('asn'))}",
+                f"  bgp_advertised_ip_ranges = {json.dumps(cr.get('bgp_advertised_ip_ranges', []))}",
+                f"  interfaces = {json.dumps(cr.get('interfaces', []))}",
+                f"  bgp_peers  = {json.dumps(cr.get('bgp_peers', []))}",
                 f"}}\n",
             ])
         )
@@ -416,6 +461,8 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  display_name   = {json.dumps(r.get('display_name'))}",
                 f"  connect_mode   = \"{r.get('connect_mode', 'DIRECT_PEERING')}\"",
                 f"  authorized_network = {json.dumps(r.get('authorized_network'))}",
+                f"  maintenance_policy = {json.dumps(r.get('maintenance_policy'))}",
+                f"  persistence_config = {json.dumps(r.get('persistence_config'))}",
                 f"  labels = {json.dumps(r.get('labels', {}))}",
                 f"}}\n",
             ])

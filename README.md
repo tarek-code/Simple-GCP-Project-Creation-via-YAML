@@ -605,3 +605,317 @@ resources:
 Notes:
 - You can declare multiple items for list-based resources (VMs, subnets, buckets, topics, datasets, functions).
 - The workflow: `deploy.py` performs plan by default and prompts to apply per project.
+
+## 🧩 Advanced YAML Fields (per module)
+
+The deploy script now supports rich configuration across modules. Below are additional fields you can set under `resources:`.
+
+- Storage Buckets: `force_destroy`, `storage_class`, `public_access_prevention`, `default_kms_key_name`, `logging { log_bucket, log_object_prefix }`, `cors[]`, `lifecycle_rules[]`, `retention_policy { retention_period, is_locked? }`
+- Subnets: `secondary_ip_ranges[]` for pod/service secondary ranges
+- Firewall: `allows[]`, `denies[]`, `target_service_accounts[]`, `destination_ranges[]`
+- Pub/Sub Topics: `subscriptions[]` with `dead_letter_topic`, `filter`, `retry_min_backoff`, `retry_max_backoff`, `push_endpoint`, `oidc_*`
+- Cloud SQL: `deletion_protection`, `availability_type`, `disk_size`, `disk_type`, `ipv4_enabled`, `private_network`, `authorized_networks[]`, `backup_configuration`, `maintenance_window`, `database_flags[]`, `insights_config`, `kms_key_name`
+- GKE: `network`, `subnetwork`, `cluster_secondary_range_name`, `services_secondary_range_name`, `enable_private_nodes`, `master_ipv4_cidr_block`, `enable_network_policy`, `node_auto_scaling`, `node_labels`, `node_taints`
+- Cloud Router: `asn`, `bgp_advertised_ip_ranges[]`, `interfaces[]`, `bgp_peers[]`
+- Memorystore Redis: `maintenance_policy`, `persistence_config`
+- Secret Manager: `replication` (auto or user-managed with CMEK), `additional_versions[]`
+- Cloud DNS Zones: `record_sets[]`
+- IAM Bindings: `members[]` and optional `condition { title, expression, description? }`
+
+See examples throughout the YAML User Manual section above for concrete snippets using these fields.
+
+## 📈 Coverage
+
+- Feature coverage (for supported services): ~80% of commonly used options; ~60–70% if you consider the entire GCP feature surface across all services.
+- Module coverage (how many GCP products we have modules for): ~30–40% of GCP services (core infra and app platforms). Not yet covered are many data/ML and specialized services (e.g., Vertex AI, Dataflow/Dataproc, advanced BigQuery features, Dataplex, Pub/Sub Lite, advanced KMS/SCC/org policies, full load balancing/PSC/VPN/Interconnect, etc.).
+
+## 📚 YAML User Manual
+
+This section explains exactly how to write YAML files in `configs/` to compose infrastructure using the available modules. Each YAML file represents one GCP project.
+
+### 1) Top-level required fields
+
+```yaml
+project_id: "my-project-id"         # required, must be globally unique
+billing_account: "AAAAAA-BBBBBB-CCCCCC"  # required unless project already exists and is billed
+organization_id: "123456789012"     # optional, set if creating under an org/folder
+labels:                              # optional
+  key: value
+apis:                                # strongly recommended; enable what you need
+  - compute.googleapis.com
+  - iam.googleapis.com
+  - storage.googleapis.com
+  - run.googleapis.com
+resources: {}                        # optional; define modules here
+```
+
+Tips:
+- If the project already exists, the system will detect it and skip creation but will still enable `apis`.
+- Use short, DNS-safe names (letters, numbers, hyphens) for resources that become GCP names.
+
+### 2) Referencing between resources
+
+- Many modules accept names that refer to other declared resources in the same YAML.
+- Common references:
+  - Subnet `network` must match the VPC `name`.
+  - VM `subnetwork` must match a declared subnet `name`.
+  - Cloud Run `vpc_connector` must match a declared Serverless VPC Connector `name`.
+  - Cloud NAT `router` must match a declared Cloud Router `name`.
+
+The deployer wires safe `depends_on` automatically when it detects these references.
+
+### 3) Module blocks under `resources:`
+
+Add only what you need. Omit anything you are not using. List-based modules accept multiple entries.
+
+#### VPC
+```yaml
+resources:
+  vpc:
+    name: vpc-a
+    routing_mode: GLOBAL           # GLOBAL or REGIONAL (default GLOBAL)
+    description: "Shared VPC"
+```
+
+#### Subnets (list)
+```yaml
+resources:
+  subnets:
+    - name: subnet-a1
+      region: us-central1
+      ip_cidr_range: 10.10.0.0/24
+      network: vpc-a
+      private_ip_google_access: true       # optional
+```
+
+#### Firewall rules (list)
+```yaml
+resources:
+  firewall_rules:
+    - name: allow-ssh
+      network: vpc-a
+      direction: INGRESS                  # optional (INGRESS default)
+      priority: 1000                      # optional
+      ranges: ["0.0.0.0/0"]
+      allow:
+        - protocol: tcp
+          ports: ["22"]
+```
+
+#### Service accounts (list)
+```yaml
+resources:
+  service_accounts:
+    - account_id: vm-runtime
+      display_name: "VM Runtime SA"
+```
+
+#### IAM bindings (list)
+```yaml
+resources:
+  iam_bindings:
+    - role: roles/storage.admin
+      member: serviceAccount:vm-runtime@my-project-id.iam.gserviceaccount.com
+```
+
+#### Compute instances (VMs) (list)
+```yaml
+resources:
+  compute_instances:
+    - name: vm-a1
+      zone: us-central1-a
+      machine_type: e2-micro
+      image: debian-cloud/debian-11
+      subnetwork: subnet-a1
+      tags: ["ssh"]                      # optional
+      metadata: { startup-script: "#!/bin/bash\necho hi" }  # optional
+```
+
+#### Storage buckets (list)
+```yaml
+resources:
+  storage_buckets:
+    - name: my-bucket
+      location: US
+      enable_versioning: true
+      uniform_bucket_level_access: true
+      labels: { purpose: backups }
+```
+
+#### Pub/Sub topics (list)
+```yaml
+resources:
+  pubsub_topics:
+    - name: events
+      labels: { env: dev }
+```
+
+#### Serverless VPC Connectors (list)
+Prerequisites: VPC must exist in the same project. Choose a dedicated CIDR that does not overlap subnets.
+```yaml
+resources:
+  serverless_vpc_connectors:
+    - name: run-connector
+      region: us-central1
+      network: vpc-a
+      ip_cidr_range: 10.8.0.0/28
+```
+
+#### Cloud Run services (list)
+```yaml
+resources:
+  cloud_run_services:
+    - name: hello
+      location: us-central1
+      image: nginxinc/nginx-unprivileged:stable-alpine
+      allow_unauthenticated: true           # optional
+      vpc_connector: run-connector          # optional
+      egress: all-traffic                   # one of: all, all-traffic, private-ranges-only
+```
+
+#### Cloud SQL instances (list)
+```yaml
+resources:
+  cloud_sql_instances:
+    - name: sql-a
+      database_version: POSTGRES_14
+      region: us-central1
+      tier: db-f1-micro
+```
+
+#### Artifact Registry (list)
+```yaml
+resources:
+  artifact_repos:
+    - name: docker-repo
+      location: us
+      format: DOCKER
+```
+
+#### Secret Manager (list)
+```yaml
+resources:
+  secrets:
+    - name: api-token
+      value: "dummy"
+```
+
+#### Cloud DNS managed zones (list)
+```yaml
+resources:
+  dns_zones:
+    - name: example-zone
+      dns_name: example.internal.
+```
+
+#### BigQuery datasets (list)
+```yaml
+resources:
+  bigquery_datasets:
+    - dataset_id: analytics
+      location: US
+```
+
+#### Cloud Functions (2nd gen) (list)
+```yaml
+resources:
+  cloud_functions:
+    - name: fn-http
+      location: us-central1
+      runtime: python311
+      entry_point: main
+      source_bucket: code-bucket
+      source_object: functions/fn-http.zip
+```
+
+#### GKE cluster (single object)
+```yaml
+resources:
+  gke:
+    name: gke-a
+    location: us-central1
+    node_pool_name: np-a
+    node_count: 1
+    machine_type: e2-standard-2
+```
+
+#### Cloud Router (single object)
+```yaml
+resources:
+  cloud_router:
+    name: router-a
+    region: us-central1
+    network: vpc-a
+```
+
+#### Cloud NAT (single object)
+```yaml
+resources:
+  cloud_nat:
+    name: nat-a
+    region: us-central1
+    router: router-a
+```
+
+#### Memorystore Redis (list)
+```yaml
+resources:
+  memorystore_redis:
+    - name: redis-a
+      region: us-central1
+      tier: BASIC
+      memory_size_gb: 1
+```
+
+### 4) API checklist per feature
+
+Enable the APIs you need in the top-level `apis:` list. Common examples:
+- VMs, VPC: `compute.googleapis.com`
+- Cloud Run: `run.googleapis.com`, VPC connector: `vpcaccess.googleapis.com`
+- Cloud SQL: `sqladmin.googleapis.com`
+- Artifact Registry: `artifactregistry.googleapis.com`
+- Secret Manager: `secretmanager.googleapis.com`
+- GKE: `container.googleapis.com`
+- BigQuery: `bigquery.googleapis.com`
+- Cloud Functions: `cloudfunctions.googleapis.com`, plus source storage API if pulling from bucket
+
+### 5) End-to-end examples
+
+Minimal Cloud Run + VPC connector + VPC/Subnet:
+```yaml
+project_id: dev-intern-poc
+billing_account: "01783B-A7A65B-153181"
+apis:
+  - run.googleapis.com
+  - compute.googleapis.com
+  - vpcaccess.googleapis.com
+resources:
+  vpc:
+    name: vpc-run
+  subnets:
+    - name: subnet-run
+      region: us-central1
+      ip_cidr_range: 10.20.0.0/24
+      network: vpc-run
+  serverless_vpc_connectors:
+    - name: run-connector
+      region: us-central1
+      network: vpc-run
+      ip_cidr_range: 10.8.0.0/28
+  cloud_run_services:
+    - name: hello-run
+      location: us-central1
+      image: nginxinc/nginx-unprivileged:stable-alpine
+      allow_unauthenticated: true
+      vpc_connector: run-connector
+      egress: all-traffic
+```
+
+### 6) Running
+
+```bash
+python scripts/deploy.py configs/my-project.yaml
+```
+
+The script runs `terraform plan` by default and asks for confirmation before applying changes per project.
+

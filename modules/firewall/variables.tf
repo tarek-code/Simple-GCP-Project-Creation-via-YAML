@@ -49,4 +49,34 @@ variable "target_tags" {
   default     = []
 }
 
+variable "target_service_accounts" {
+  description = "Target service accounts"
+  type        = list(string)
+  default     = []
+}
+
+variable "destination_ranges" {
+  description = "Destination ranges (for EGRESS)"
+  type        = list(string)
+  default     = []
+}
+
+variable "allows" {
+  description = "Multiple allow blocks: list of { protocol, ports }"
+  type = list(object({
+    protocol = string
+    ports    = optional(list(string))
+  }))
+  default = []
+}
+
+variable "denies" {
+  description = "Multiple deny blocks: list of { protocol, ports }"
+  type = list(object({
+    protocol = string
+    ports    = optional(list(string))
+  }))
+  default = []
+}
+
 

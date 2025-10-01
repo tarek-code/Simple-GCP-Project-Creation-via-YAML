@@ -44,4 +44,71 @@ variable "tags" {
   default     = []
 }
 
+variable "network" {
+  description = "VPC network name or self link"
+  type        = string
+  default     = null
+}
+
+variable "subnetwork" {
+  description = "Subnetwork name or self link"
+  type        = string
+  default     = null
+}
+
+variable "enable_private_nodes" {
+  description = "Enable private nodes"
+  type        = bool
+  default     = false
+}
+
+variable "master_ipv4_cidr_block" {
+  description = "Master CIDR for private cluster"
+  type        = string
+  default     = null
+}
+
+variable "enable_network_policy" {
+  description = "Enable network policy"
+  type        = bool
+  default     = false
+}
+
+variable "cluster_secondary_range_name" {
+  description = "Secondary range name for pods"
+  type        = string
+  default     = null
+}
+
+variable "services_secondary_range_name" {
+  description = "Secondary range name for services"
+  type        = string
+  default     = null
+}
+
+variable "node_auto_scaling" {
+  description = "Node autoscaling for node pool: { min_node_count, max_node_count }"
+  type = object({
+    min_node_count = number
+    max_node_count = number
+  })
+  default = null
+}
+
+variable "node_labels" {
+  description = "Additional node labels"
+  type        = map(string)
+  default     = {}
+}
+
+variable "node_taints" {
+  description = "Node taints list of { key, value, effect }"
+  type = list(object({
+    key    = string
+    value  = string
+    effect = string
+  }))
+  default = []
+}
+
 

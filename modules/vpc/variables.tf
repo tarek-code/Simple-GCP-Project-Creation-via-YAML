@@ -20,4 +20,10 @@ variable "description" {
   default     = null
 }
 
+variable "mtu" {
+  description = "MTU for the VPC (1460-1500), optional"
+  type        = number
+  default     = null
+}
+
 
