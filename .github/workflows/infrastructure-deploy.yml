@@ -48,10 +48,12 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Auth to GCP
-        if: env.GCP_SERVICE_ACCOUNT_KEY != '' || secrets.GCP_SERVICE_ACCOUNT_KEY != ''
+        env:
+          GCP_SA_KEY: ${{ secrets.GIT_ACTION_GCP }}
+        if: ${{ env.GCP_SA_KEY != '' }}
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          credentials_json: ${{ env.GCP_SA_KEY }}
 
       - name: Parse intent and files from commit message
         id: parse
