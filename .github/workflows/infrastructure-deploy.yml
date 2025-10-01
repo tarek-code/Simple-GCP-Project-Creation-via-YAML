@@ -77,8 +77,13 @@ jobs:
             [[ "$MSG" =~ destroy ]] && ACTION=destroy || true
             [[ "$MSG" =~ yes ]] && APPROVE=yes || true
             shopt -u nocasematch
-            RANGE="${{ github.event.before }}..${{ github.sha }}"
-            FILES=$(git diff --name-only $RANGE | grep -E '^configs/.+\.(yaml|yml)$' || true)
+            # Extract explicit file paths from commit message if present
+            FILES=$(printf '%s' "$MSG" | grep -oE 'configs/[A-Za-z0-9_./\-]+\.(ya?ml)' | xargs -r echo || true)
+            # If none specified in message, fall back to changed files
+            if [[ -z "$FILES" ]]; then
+              RANGE="${{ github.event.before }}..${{ github.sha }}"
+              FILES=$(git diff --name-only $RANGE | grep -E '^configs/.+\.(yaml|yml)$' || true)
+            fi
           fi
           echo "action=$ACTION" >> $GITHUB_OUTPUT
           echo "approve=$APPROVE" >> $GITHUB_OUTPUT
