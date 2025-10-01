@@ -3,6 +3,7 @@ import os
 import sys
 import yaml
 from typing import List, Tuple
+import shutil
 
 USAGE = (
     "Usage:\n"
@@ -10,6 +11,34 @@ USAGE = (
     "  python scripts/destroy.py [--force] --project <project_id> [--project <project_id> ...]\n"
     "Notes: Targets can be one or more YAML files and/or --project ids.\n"
 )
+
+def resolve_gcloud_bin() -> str:
+    """Return path to gcloud binary or empty string if not found.
+
+    Resolution order:
+      1) GCLOUD_BIN env var (explicit path)
+      2) PATH (shutil.which)
+      3) Common Windows installs
+    """
+    # 1) Env var
+    gcb = os.environ.get("GCLOUD_BIN", "").strip().strip('"')
+    if gcb and os.path.exists(gcb):
+        return gcb
+    # 2) PATH
+    found = shutil.which("gcloud")
+    if found:
+        return found
+    # 3) Common Windows paths
+    candidates = [
+        r"C:\\Program Files\\Google\\Cloud SDK\\google-cloud-sdk\\bin\\gcloud.cmd",
+        r"C:\\Program Files\\Google\\Cloud SDK\\google-cloud-sdk\\bin\\gcloud.exe",
+        r"C:\\Program Files (x86)\\Google\\Cloud SDK\\google-cloud-sdk\\bin\\gcloud.cmd",
+        r"C:\\Program Files (x86)\\Google\\Cloud SDK\\google-cloud-sdk\\bin\\gcloud.exe",
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return ""
 
 def yaml_to_dict(yaml_file: str) -> dict:
     with open(yaml_file, "r") as f:
@@ -165,7 +194,58 @@ def main():
 
     try:
         for pid in projects:
+            # Ask per-project what to do
+            while True:
+                print(f"\nChoose action for project '{pid}':")
+                print("  [m] Delete modules/resources (Terraform destroy)")
+                print("  [p] Delete entire project (also attempts gcloud project delete)")
+                print("  [e] Exit")
+                action = input("Enter choice [m/p/e]: ").strip().lower()
+                if action in ("m", "p", "e"):
+                    break
+
+            if action == "e":
+                print("[INFO] Exiting by user request.")
+                sys.exit(0)
+
+            # Always destroy modules/resources first
             run_destroy_for_project(pid, auto_approve)
+
+            if action == "p":
+                # Attempt to delete the project explicitly
+                print(f"[INFO] Attempting to unlink billing and delete project '{pid}' via gcloud...")
+                gcloud_bin = resolve_gcloud_bin()
+                if not gcloud_bin:
+                    print("[WARN] gcloud not found. Set GCLOUD_BIN env var or add Cloud SDK to PATH.")
+                else:
+                    try:
+                        subprocess.run([gcloud_bin, "beta", "billing", "projects", "unlink", pid], check=False)
+                    except Exception as e:
+                        print(f"[WARN] Could not unlink billing for {pid}: {e}")
+                    try:
+                        subprocess.run([gcloud_bin, "projects", "delete", pid, "--quiet"], check=False)
+                    except Exception as e:
+                        print(f"[WARN] Could not delete project {pid}: {e}")
+
+                # Remove run directory only if project is confirmed deleted or in delete-requested state
+                try:
+                    gcloud_bin = resolve_gcloud_bin()
+                    check = subprocess.run(
+                        [gcloud_bin if gcloud_bin else "gcloud", "projects", "describe", pid, "--format=value(lifecycleState)"],
+                        capture_output=True, text=True
+                    )
+                    lifecycle = (check.stdout or "").strip()
+                    if check.returncode != 0 or lifecycle == "DELETE_REQUESTED":
+                        script_dir = os.path.dirname(os.path.abspath(__file__))
+                        project_root = os.path.dirname(script_dir)
+                        run_dir = os.path.join(project_root, ".tf-runs", pid)
+                        import shutil
+                        shutil.rmtree(run_dir, ignore_errors=True)
+                        print(f"[INFO] Removed run directory: {run_dir}")
+                    else:
+                        print(f"[INFO] Project '{pid}' lifecycleState='{lifecycle}'. Keeping run directory.")
+                except Exception as e:
+                    print(f"[WARN] Could not verify project deletion for {pid}: {e}")
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Terraform destroy failed with exit code {e.returncode}")
         sys.exit(1)
