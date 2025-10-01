@@ -143,6 +143,6 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .tf-runs || true
+          git add -f .tf-runs || true
           git commit -m "CI: persist tf state for ${{ steps.parse.outputs.files }} (action=${{ steps.parse.outputs.action }}, approve=${{ steps.parse.outputs.approve }})" || echo "No changes to commit"
           git push || echo "Nothing pushed"
