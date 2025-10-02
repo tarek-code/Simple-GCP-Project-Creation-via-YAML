@@ -166,28 +166,31 @@ python scripts/destroy.py --force
 
 ### GitHub Actions Deployment
 
-#### 1. Automatic Deployment
-The workflow automatically triggers when:
-- A commit message contains the word "deploy"
-- Files in the `configs/` directory are modified
-- Manual trigger via GitHub Actions UI
+#### 1. Commit-based triggers (exact patterns)
+On push to `main`, the workflow parses the commit message and only runs when it matches one of these exact patterns (case-insensitive; extra spaces allowed; extra words are not allowed):
 
-#### 2. Trigger Deployment
-```bash
-# This will trigger deployment
-git commit -m "deploy new infrastructure"
-git push
+- `deploy` → plan only for all changed YAMLs under `configs/`
+- `deploy yes` → plan + apply for all changed YAMLs
+- `deploy configs/<file>.yaml` → plan only for the specified YAML
+- `deploy configs/<file>.yaml yes` → plan + apply for the specified YAML
+- `destroy` → plan-only destroy for all changed YAMLs
+- `destroy yes` → apply destroy for all changed YAMLs (modules/resources)
+- `destroy configs/<file>.yaml` → plan-only destroy for the specified YAML
+- `destroy configs/<file>.yaml yes` → apply destroy for the specified YAML
 
-# This will NOT trigger deployment
-git commit -m "update documentation"
-git push
-```
+Notes:
+- If you include the word `project` in a destroy apply commit (e.g., `destroy configs/<file>.yaml yes project`), the workflow will delete the entire GCP project after destroying modules.
+- When no specific file is provided, the workflow targets YAMLs changed in the pushed commit range.
+- Any other message results in a quick no-op run.
 
-#### 3. Manual Deployment
+#### 2. Manual Deployment/Destruction
 1. Go to GitHub Actions tab
 2. Select "Infrastructure Deploy" workflow
 3. Click "Run workflow"
-4. Specify the YAML file to deploy
+4. Inputs:
+   - action: `deploy` or `destroy`
+   - files: space-separated YAMLs, e.g. `configs/proj-a.yaml configs/proj-b.yaml`
+   - approve: `yes` (apply) or `no` (plan-only)
 
 ## 🔧 Configuration Files Explained
 
