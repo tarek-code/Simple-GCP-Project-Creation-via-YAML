@@ -1,8 +1,6 @@
 name: Infrastructure Deploy/Destroy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       action:
@@ -11,10 +9,10 @@ on:
         default: deploy
       files:
         description: space-separated YAML paths (e.g., configs/a.yaml configs/b.yaml)
-        required: false
+        required: true
       approve:
         description: yes to auto-apply / non-interactive
-        required: false
+        required: true
         default: "no"
 
 permissions:
@@ -58,49 +56,19 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Parse intent and files from commit message
+      - name: Parse workflow inputs
         id: parse
         shell: bash
         run: |
           set -euo pipefail
-          MSG="${{ github.event.head_commit.message }}"
-          ACTION=""
-          APPROVE="no"
-          FILES=""
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            ACTION="${{ github.event.inputs.action }}"
-            APPROVE="${{ github.event.inputs.approve }}"
-            FILES="${{ github.event.inputs.files }}"
-          else
-            shopt -s nocasematch
-            [[ "$MSG" =~ deploy ]] && ACTION=deploy || true
-            [[ "$MSG" =~ destroy ]] && ACTION=destroy || true
-            [[ "$MSG" =~ yes ]] && APPROVE=yes || true
-            shopt -u nocasematch
-            # Extract explicit file paths from commit message if present
-            FILES=$(printf '%s' "$MSG" | grep -oE 'configs/[A-Za-z0-9_./\-]+\.(ya?ml)' | xargs -r echo || true)
-            # If none specified in message, fall back to changed files
-            if [[ -z "$FILES" ]]; then
-              RANGE="${{ github.event.before }}..${{ github.sha }}"
-              FILES=$(git diff --name-only $RANGE | grep -E '^configs/.+\.(yaml|yml)$' || true)
-            fi
-          fi
+          ACTION="${{ github.event.inputs.action }}"
+          APPROVE="${{ github.event.inputs.approve }}"
+          FILES="${{ github.event.inputs.files }}"
+
           echo "action=$ACTION" >> $GITHUB_OUTPUT
           echo "approve=$APPROVE" >> $GITHUB_OUTPUT
           echo "files=$FILES" >> $GITHUB_OUTPUT
           printf "Parsed action='%s' approve='%s' files=\n%s\n" "$ACTION" "$APPROVE" "$FILES"
-
-      - name: Short-circuit if no action detected
-        if: steps.parse.outputs.action == ''
-        run: |
-          echo "No deploy/destroy action detected in commit. Skipping."
-          exit 0
-
-      - name: Short-circuit if no config files detected
-        if: steps.parse.outputs.files == ''
-        run: |
-          echo "No configs/*.yaml detected in commit or workflow inputs. Skipping."
-          exit 0
 
       - name: Show plan-only note for destroy without approve
         if: steps.parse.outputs.action == 'destroy' && steps.parse.outputs.approve != 'yes'
