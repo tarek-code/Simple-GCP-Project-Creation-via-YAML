@@ -727,9 +727,38 @@ resources:
 ```yaml
 resources:
   service_accounts:
-    - account_id: vm-runtime
-      display_name: "VM Runtime SA"
+    # Basic service account
+    - account_id: "vm-runtime"
+      display_name: "VM Runtime Service Account"
+      description: "Service account for VM operations"
+    
+    # Application service account
+    - account_id: "app-service"
+      display_name: "Application Service Account"
+      description: "Service account for application services"
+    
+    # Database service account
+    - account_id: "db-service"
+      display_name: "Database Service Account"
+      description: "Service account for database operations"
+    
+    # CI/CD service account
+    - account_id: "cicd-pipeline"
+      display_name: "CI/CD Pipeline Service Account"
+      description: "Service account for CI/CD operations"
+    
+    # Monitoring service account
+    - account_id: "monitoring-agent"
+      display_name: "Monitoring Agent Service Account"
+      description: "Service account for monitoring and logging"
 ```
+
+**Service Account Features:**
+- **Account ID**: Unique identifier (no domain suffix)
+- **Display Name**: Human-readable name
+- **Description**: Purpose and usage description
+- **IAM Integration**: Use with `iam_bindings` for role assignment
+- **Cross-Service**: Can be used across multiple GCP services
 
 #### IAM bindings (list)
 ```yaml
@@ -857,9 +886,65 @@ resources:
 ```yaml
 resources:
   dns_zones:
-    - name: example-zone
-      dns_name: example.internal.
+    # Public DNS zone
+    - name: "my-domain-zone"
+      dns_name: "example.com."
+      description: "Public DNS zone for example.com"
+      record_sets:
+        - name: "example.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["1.2.3.4"]
+        
+        - name: "www.example.com."
+          type: "CNAME"
+          ttl: 300
+          rrdatas: ["example.com."]
+        
+        - name: "api.example.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["5.6.7.8"]
+        
+        - name: "example.com."
+          type: "MX"
+          ttl: 300
+          rrdatas: ["10 mail.example.com."]
+        
+        - name: "example.com."
+          type: "TXT"
+          ttl: 300
+          rrdatas: ["\"v=spf1 include:_spf.google.com ~all\""]
+    
+    # Private DNS zone
+    - name: "internal-zone"
+      dns_name: "internal.company."
+      description: "Private DNS zone for internal services"
+      record_sets:
+        - name: "db.internal.company."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.1.100"]
+        
+        - name: "api.internal.company."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.1.200"]
+        
+        - name: "cache.internal.company."
+          type: "CNAME"
+          ttl: 300
+          rrdatas: ["redis.internal.company."]
 ```
+
+**DNS Record Types:**
+- **A**: IPv4 address records
+- **AAAA**: IPv6 address records  
+- **CNAME**: Canonical name (alias)
+- **MX**: Mail exchange records
+- **TXT**: Text records (SPF, DKIM, etc.)
+- **NS**: Name server records
+- **SRV**: Service records
 
 #### BigQuery datasets (list)
 ```yaml

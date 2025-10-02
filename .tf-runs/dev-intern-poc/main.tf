@@ -23,66 +23,341 @@ module "project" {
 
 
 # Additional resources from YAML
+module "storage_bucket_1" {
+  source  = "../../modules/storage_bucket"
+  project_id = var.project_id
+  name        = "web-app-assets-bucket"
+  location    = "US"
+  uniform_bucket_level_access = true
+  enable_versioning = false
+  force_destroy = false
+  storage_class = null
+  public_access_prevention = null
+  default_kms_key_name = null
+  logging = null
+  cors = []
+  lifecycle_rules = []
+  retention_policy = null
+  labels = {"purpose": "web-assets", "service": "web-app"}
+}
+
+module "storage_bucket_2" {
+  source  = "../../modules/storage_bucket"
+  project_id = var.project_id
+  name        = "backup-storage-bucket"
+  location    = "US"
+  uniform_bucket_level_access = true
+  enable_versioning = false
+  force_destroy = false
+  storage_class = null
+  public_access_prevention = null
+  default_kms_key_name = null
+  logging = null
+  cors = []
+  lifecycle_rules = []
+  retention_policy = null
+  labels = {"purpose": "backups", "service": "backup-service"}
+}
+
 module "service_account_1" {
   source  = "../../modules/service_account"
   project_id   = var.project_id
-  account_id   = "pubsub-service-account"
+  account_id   = "web-app-service"
+  display_name = "Web Application Service Account"
+  description  = "Service account for web application operations and API access"
+}
+
+module "service_account_2" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "database-service"
+  display_name = "Database Service Account"
+  description  = "Service account for database connections and operations"
+}
+
+module "service_account_3" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "cicd-pipeline"
+  display_name = "CI/CD Pipeline Service Account"
+  description  = "Service account for continuous integration and deployment"
+}
+
+module "service_account_4" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "monitoring-agent"
+  display_name = "Monitoring Agent Service Account"
+  description  = "Service account for monitoring, logging, and metrics collection"
+}
+
+module "service_account_5" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "storage-service"
+  display_name = "Storage Service Account"
+  description  = "Service account for file storage operations and backups"
+}
+
+module "service_account_6" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "pubsub-service"
   display_name = "Pub/Sub Service Account"
-  description  = "Service account for Pub/Sub operations"
+  description  = "Service account for message publishing and subscription"
+}
+
+module "service_account_7" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "compute-service"
+  display_name = "Compute Service Account"
+  description  = "Service account for VM and container operations"
+}
+
+module "service_account_8" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "security-service"
+  display_name = "Security Service Account"
+  description  = "Service account for security scanning and compliance checks"
+}
+
+module "service_account_9" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "analytics-service"
+  display_name = "Analytics Service Account"
+  description  = "Service account for data analytics and reporting"
+}
+
+module "service_account_10" {
+  source  = "../../modules/service_account"
+  project_id   = var.project_id
+  account_id   = "backup-service"
+  display_name = "Backup Service Account"
+  description  = "Service account for automated backup operations"
+}
+
+module "iam_binding_1" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/storage.objectViewer"
+  member  = "serviceAccount:web-app-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_2" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/pubsub.subscriber"
+  member  = "serviceAccount:web-app-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_3" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:database-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_4" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/cloudsql.instanceUser"
+  member  = "serviceAccount:database-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_5" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/cloudbuild.builds.builder"
+  member  = "serviceAccount:cicd-pipeline@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_6" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/container.developer"
+  member  = "serviceAccount:cicd-pipeline@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_7" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:cicd-pipeline@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_8" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:monitoring-agent@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_9" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:monitoring-agent@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_10" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/monitoring.viewer"
+  member  = "serviceAccount:monitoring-agent@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_11" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:storage-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_12" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/storage.legacyBucketReader"
+  member  = "serviceAccount:storage-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_13" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:pubsub-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_14" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/pubsub.subscriber"
+  member  = "serviceAccount:pubsub-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_15" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/pubsub.admin"
+  member  = "serviceAccount:pubsub-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_16" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/compute.instanceAdmin"
+  member  = "serviceAccount:compute-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_17" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/compute.networkAdmin"
+  member  = "serviceAccount:compute-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_18" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/securitycenter.findingsEditor"
+  member  = "serviceAccount:security-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_19" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/cloudasset.viewer"
+  member  = "serviceAccount:security-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_20" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/bigquery.dataViewer"
+  member  = "serviceAccount:analytics-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_21" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:analytics-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_22" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:backup-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
+}
+
+module "iam_binding_23" {
+  source  = "../../modules/iam_binding"
+  project_id = var.project_id
+  role    = "roles/compute.storageAdmin"
+  member  = "serviceAccount:backup-service@dev-intern-poc.iam.gserviceaccount.com"
+  members = []
+  condition = null
 }
 
 module "pubsub_topic_1" {
   source  = "../../modules/pubsub"
   project_id = var.project_id
-  name    = "user-events"
-  labels  = {"env": "dev", "service": "user-management", "purpose": "events"}
+  name    = "web-app-events"
+  labels  = {"service": "web-app", "purpose": "events"}
   subscriptions = []
 }
 
 module "pubsub_topic_2" {
   source  = "../../modules/pubsub"
   project_id = var.project_id
-  name    = "order-processing"
-  labels  = {"env": "dev", "service": "e-commerce", "purpose": "orders"}
-  subscriptions = [{"name": "inventory-service", "ack_deadline_seconds": 60, "retain_acked_messages": true, "message_retention_duration": "604800s", "description": "Inventory management service"}, {"name": "payment-service", "ack_deadline_seconds": 120, "retain_acked_messages": false, "message_retention_duration": "86400s", "description": "Payment processing service"}, {"name": "shipping-service", "ack_deadline_seconds": 300, "retain_acked_messages": true, "message_retention_duration": "1209600s", "description": "Shipping and logistics service"}]
-}
-
-module "pubsub_topic_3" {
-  source  = "../../modules/pubsub"
-  project_id = var.project_id
-  name    = "notifications"
-  labels  = {"env": "dev", "service": "notification-system", "purpose": "alerts"}
-  subscriptions = [{"name": "email-notifications", "push_endpoint": "https://email-service.example.com/webhook", "oidc_service_account_email": "pubsub-service-account@dev-intern-poc.iam.gserviceaccount.com", "oidc_audience": "email-service-audience", "ack_deadline_seconds": 30, "retry_min_backoff": "10s", "retry_max_backoff": "300s", "description": "Email notification service"}, {"name": "sms-notifications", "push_endpoint": "https://sms-service.example.com/webhook", "oidc_service_account_email": "pubsub-service-account@dev-intern-poc.iam.gserviceaccount.com", "oidc_audience": "sms-service-audience", "ack_deadline_seconds": 30, "retry_min_backoff": "5s", "retry_max_backoff": "600s", "description": "SMS notification service"}]
-}
-
-module "pubsub_topic_4" {
-  source  = "../../modules/pubsub"
-  project_id = var.project_id
-  name    = "sensor-data"
-  labels  = {"env": "dev", "service": "iot-platform", "purpose": "telemetry"}
-  subscriptions = [{"name": "temperature-monitoring", "filter": "attributes.sensor_type=\"temperature\"", "ack_deadline_seconds": 60, "message_retention_duration": "2592000s", "description": "Temperature sensor data processing"}, {"name": "humidity-monitoring", "filter": "attributes.sensor_type=\"humidity\"", "ack_deadline_seconds": 60, "message_retention_duration": "2592000s", "description": "Humidity sensor data processing"}, {"name": "alert-service", "filter": "attributes.value>80 OR attributes.value<10", "ack_deadline_seconds": 30, "retry_min_backoff": "5s", "retry_max_backoff": "60s", "description": "Alert service for critical values"}]
-}
-
-module "pubsub_topic_5" {
-  source  = "../../modules/pubsub"
-  project_id = var.project_id
-  name    = "critical-tasks"
-  labels  = {"env": "dev", "service": "task-processor", "purpose": "critical-workflows"}
-  subscriptions = [{"name": "task-processor", "dead_letter_topic": "failed-tasks", "max_delivery_attempts": 3, "ack_deadline_seconds": 300, "retry_min_backoff": "10s", "retry_max_backoff": "600s", "description": "Main task processing service"}, {"name": "backup-processor", "dead_letter_topic": "failed-tasks", "max_delivery_attempts": 5, "ack_deadline_seconds": 600, "retry_min_backoff": "30s", "retry_max_backoff": "1800s", "description": "Backup task processing service"}]
-}
-
-module "pubsub_topic_6" {
-  source  = "../../modules/pubsub"
-  project_id = var.project_id
-  name    = "failed-tasks"
-  labels  = {"env": "dev", "service": "error-handling", "purpose": "dead-letters"}
-  subscriptions = [{"name": "error-logger", "ack_deadline_seconds": 60, "message_retention_duration": "1209600s", "description": "Log failed tasks for analysis"}, {"name": "admin-notifications", "push_endpoint": "https://admin-alerts.example.com/webhook", "oidc_service_account_email": "pubsub-service-account@dev-intern-poc.iam.gserviceaccount.com", "oidc_audience": "admin-alerts-audience", "ack_deadline_seconds": 30, "description": "Notify administrators of failed tasks"}]
-}
-
-module "pubsub_topic_7" {
-  source  = "../../modules/pubsub"
-  project_id = var.project_id
-  name    = "temporary-data"
-  labels  = {"env": "dev", "service": "data-processing", "purpose": "temporary-storage"}
-  subscriptions = [{"name": "data-processor", "expiration_policy_ttl": "86400s", "ack_deadline_seconds": 60, "message_retention_duration": "86400s", "description": "Process temporary data with short TTL"}]
+  name    = "monitoring-alerts"
+  labels  = {"service": "monitoring", "purpose": "alerts"}
+  subscriptions = []
 }

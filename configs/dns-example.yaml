@@ -1,0 +1,237 @@
+# Cloud DNS Example Configuration
+project_id: "dev-intern-poc"
+organization_id: null
+billing_account: "01783B-A7A65B-153181"
+
+labels:
+  owner: "intern"
+  environment: "dev"
+  purpose: "dns-demo"
+
+apis:
+  - dns.googleapis.com
+  - iam.googleapis.com
+
+resources:
+  # VPC Network for private DNS
+  vpcs:
+    - name: "dns-demo-vpc"
+      auto_create_subnetworks: false
+      description: "VPC for DNS demonstration"
+
+  # Subnet for private DNS
+  subnets:
+    - name: "dns-demo-subnet"
+      network: "dns-demo-vpc"
+      region: "us-central1"
+      ip_cidr_range: "10.0.0.0/24"
+      description: "Subnet for DNS demonstration"
+      private_ip_google_access: true
+
+  # Cloud DNS Zones with various record types
+  dns_zones:
+    # Public DNS zone for a website
+    - name: "mycompany-public-zone"
+      dns_name: "mycompany-demo.com."
+      description: "Public DNS zone for mycompany-demo.com"
+      record_sets:
+        # Root domain A record
+        - name: "mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["1.2.3.4"]
+
+        # WWW subdomain CNAME
+        - name: "www.mycompany-demo.com."
+          type: "CNAME"
+          ttl: 300
+          rrdatas: ["mycompany-demo.com."]
+
+        # API subdomain A record
+        - name: "api.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["5.6.7.8"]
+
+        # Blog subdomain A record
+        - name: "blog.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["9.10.11.12"]
+
+        # Mail exchange records
+        - name: "mycompany-demo.com."
+          type: "MX"
+          ttl: 300
+          rrdatas: ["10 mail.mycompany-demo.com."]
+
+        # Mail server A record
+        - name: "mail.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["13.14.15.16"]
+
+        # SPF record
+        - name: "mycompany-demo.com."
+          type: "TXT"
+          ttl: 300
+          rrdatas: ['"v=spf1 include:_spf.google.com ~all"']
+
+        # DKIM record
+        - name: "google._domainkey.mycompany-demo.com."
+          type: "TXT"
+          ttl: 300
+          rrdatas:
+            ['"v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC..."']
+
+        # DMARC record
+        - name: "_dmarc.mycompany-demo.com."
+          type: "TXT"
+          ttl: 300
+          rrdatas:
+            ['"v=DMARC1; p=quarantine; rua=mailto:dmarc@mycompany-demo.com"']
+
+    # Private DNS zone for internal services
+    - name: "internal-services-zone"
+      dns_name: "internal.mycompany-demo.com."
+      description: "Private DNS zone for internal services"
+      record_sets:
+        # Database server
+        - name: "db.internal.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.1.100"]
+
+        # API server
+        - name: "api.internal.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.1.200"]
+
+        # Cache server
+        - name: "cache.internal.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.1.150"]
+
+        # Redis server CNAME
+        - name: "redis.internal.mycompany-demo.com."
+          type: "CNAME"
+          ttl: 300
+          rrdatas: ["cache.internal.mycompany-demo.com."]
+
+        # Load balancer
+        - name: "lb.internal.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.1.10"]
+
+        # Monitoring server
+        - name: "monitoring.internal.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.1.50"]
+
+    # Development environment DNS zone
+    - name: "dev-environment-zone"
+      dns_name: "dev.mycompany-demo.com."
+      description: "Development environment DNS zone"
+      record_sets:
+        # Development website
+        - name: "dev.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["192.168.1.100"]
+
+        # Development API
+        - name: "api.dev.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["192.168.1.200"]
+
+        # Development database
+        - name: "db.dev.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["192.168.1.150"]
+
+        # Development cache
+        - name: "cache.dev.mycompany-demo.com."
+          type: "CNAME"
+          ttl: 300
+          rrdatas: ["redis.dev.mycompany-demo.com."]
+
+        # Development Redis
+        - name: "redis.dev.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["192.168.1.175"]
+
+    # IPv6 DNS zone
+    - name: "ipv6-zone"
+      dns_name: "ipv6.mycompany-demo.com."
+      description: "IPv6 DNS zone for testing"
+      record_sets:
+        # IPv6 AAAA record
+        - name: "ipv6.mycompany-demo.com."
+          type: "AAAA"
+          ttl: 300
+          rrdatas: ["2001:db8::1"]
+
+        # IPv6 subdomain
+        - name: "www.ipv6.mycompany-demo.com."
+          type: "AAAA"
+          ttl: 300
+          rrdatas: ["2001:db8::2"]
+
+        # Mixed A and AAAA records
+        - name: "dual-stack.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["203.0.113.1"]
+
+        - name: "dual-stack.mycompany-demo.com."
+          type: "AAAA"
+          ttl: 300
+          rrdatas: ["2001:db8::3"]
+
+    # Service discovery zone
+    - name: "service-discovery-zone"
+      dns_name: "services.mycompany-demo.com."
+      description: "Service discovery DNS zone"
+      record_sets:
+        # Web service
+        - name: "web.services.mycompany-demo.com."
+          type: "SRV"
+          ttl: 300
+          rrdatas: ["10 5 80 web-server.services.mycompany-demo.com."]
+
+        # Web server A record
+        - name: "web-server.services.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.2.100"]
+
+        # Database service
+        - name: "db.services.mycompany-demo.com."
+          type: "SRV"
+          ttl: 300
+          rrdatas: ["10 5 5432 db-server.services.mycompany-demo.com."]
+
+        # Database server A record
+        - name: "db-server.services.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.2.200"]
+
+        # Cache service
+        - name: "cache.services.mycompany-demo.com."
+          type: "SRV"
+          ttl: 300
+          rrdatas: ["10 5 6379 cache-server.services.mycompany-demo.com."]
+
+        # Cache server A record
+        - name: "cache-server.services.mycompany-demo.com."
+          type: "A"
+          ttl: 300
+          rrdatas: ["10.0.2.150"]
