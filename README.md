@@ -19,7 +19,8 @@ Simple-GCP-Project-Creation-via-YAML/
 │   └── workflows/
 │       └── infrastructure-deploy.yml    # GitHub Actions workflow
 ├── configs/
-│   └── example-project.yaml            # Example project configuration
+│   ├── example-project.yaml            # Example project configuration
+│   └── static-ip-example.yaml          # Static IP examples (VPC, subnets, IPs)
 ├── modules/
 │   └── project/
 │       ├── main.tf                     # Project module Terraform code
@@ -766,9 +767,41 @@ resources:
 ```yaml
 resources:
   pubsub_topics:
-    - name: events
-      labels: { env: dev }
+    # Simple topic
+    - name: "events"
+      labels: { env: "dev", purpose: "events" }
+    
+    # Topic with subscriptions
+    - name: "user-notifications"
+      labels: { env: "prod", service: "notifications" }
+      subscriptions:
+        - name: "email-subscription"
+          ack_deadline_seconds: 60
+          retain_acked_messages: true
+          message_retention_duration: "604800s"  # 7 days
+        
+        - name: "push-subscription"
+          push_endpoint: "https://my-app.com/webhook"
+          oidc_service_account_email: "notifications@my-project.iam.gserviceaccount.com"
+          oidc_audience: "my-app-audience"
+          retry_min_backoff: "10s"
+          retry_max_backoff: "600s"
+        
+        - name: "dead-letter-subscription"
+          dead_letter_topic: "failed-notifications"
+          max_delivery_attempts: 5
+          filter: "attributes.status=\"failed\""
+          expiration_policy_ttl: "86400s"  # 24 hours
 ```
+
+**Pub/Sub Features:**
+- **Topics**: Message publishing endpoints
+- **Subscriptions**: Message consumption endpoints
+- **Push/Pull**: Push to webhooks or pull by consumers
+- **Dead Letter**: Failed message handling
+- **Retry Policies**: Custom retry backoff
+- **Message Filtering**: Attribute-based filtering
+- **Retention**: Message retention policies
 
 #### Serverless VPC Connectors (list)
 Prerequisites: VPC must exist in the same project. Choose a dedicated CIDR that does not overlap subnets.
@@ -840,18 +873,47 @@ resources:
 ```yaml
 resources:
   static_ips:
-    # Global external address (omit region)
-    - name: web-ip-global
-      description: "Global external IP for LB"
-
-    # Regional internal address
-    - name: vm-internal-ip
-      address_type: INTERNAL            # EXTERNAL (default) or INTERNAL
-      region: us-central1               # required for regional
-      subnetwork: default               # for INTERNAL addresses
-      purpose: GCE_ENDPOINT             # optional, e.g. GCE_ENDPOINT, VPC_PEERING
-      description: "Internal IP for VM"
+    # External Regional Static IP
+    - name: "web-server-external-ip"
+      address_type: "EXTERNAL"          # EXTERNAL (default) or INTERNAL
+      region: "us-central1"             # required for regional IPs
+      description: "External static IP for web server"
+      network_tier: "PREMIUM"           # PREMIUM or STANDARD (for external)
+    
+    # External Global Static IP (no region specified)
+    - name: "global-lb-ip"
+      address_type: "EXTERNAL"
+      description: "Global static IP for load balancer"
+      network_tier: "PREMIUM"
+    
+    # Internal Regional Static IP
+    - name: "internal-api-ip"
+      address_type: "INTERNAL"
+      region: "us-central1"
+      subnetwork: "demo-subnet"         # required for INTERNAL addresses
+      purpose: "GCE_ENDPOINT"           # GCE_ENDPOINT, VPC_PEERING, etc.
+      description: "Internal static IP for API server"
+    
+    # Internal IP with specific address
+    - name: "database-internal-ip"
+      address_type: "INTERNAL"
+      region: "us-central1"
+      subnetwork: "demo-subnet"
+      address: "10.0.0.100"            # optional specific IP, or auto-allocate
+      purpose: "GCE_ENDPOINT"
+      description: "Internal static IP for database (fixed address)"
 ```
+
+**Static IP Types:**
+- **EXTERNAL**: Public IPs accessible from internet (no VPC required)
+- **INTERNAL**: Private IPs within VPC (requires subnetwork)
+
+**Key Fields:**
+- `region`: Required for regional IPs, omit for global IPs
+- `subnetwork`: Required for INTERNAL IPs (must reference existing subnet)
+- `purpose`: For INTERNAL IPs (GCE_ENDPOINT, VPC_PEERING, etc.)
+- `address`: Optional specific IP to assign, or let Google auto-allocate
+- `network_tier`: PREMIUM or STANDARD (for external IPs)
 
 #### Compute disks (list)
 ```yaml

@@ -1,0 +1,163 @@
+# Pub/Sub Example Configuration
+project_id: "dev-intern-poc"
+organization_id: null
+billing_account: "01783B-A7A65B-153181"
+
+labels:
+  owner: "intern"
+  environment: "dev"
+  purpose: "pubsub-demo"
+
+apis:
+  - pubsub.googleapis.com
+  - iam.googleapis.com
+
+resources:
+  # Service Account for Pub/Sub authentication
+  service_accounts:
+    - account_id: "pubsub-service-account"
+      display_name: "Pub/Sub Service Account"
+      description: "Service account for Pub/Sub operations"
+      roles:
+        - "roles/pubsub.publisher"
+        - "roles/pubsub.subscriber"
+
+  # Pub/Sub Topics with various subscription types
+  pubsub_topics:
+    # Simple topic for basic messaging
+    - name: "user-events"
+      labels:
+        env: "dev"
+        service: "user-management"
+        purpose: "events"
+
+    # Topic with pull subscriptions
+    - name: "order-processing"
+      labels:
+        env: "dev"
+        service: "e-commerce"
+        purpose: "orders"
+      subscriptions:
+        - name: "inventory-service"
+          ack_deadline_seconds: 60
+          retain_acked_messages: true
+          message_retention_duration: "604800s" # 7 days
+          description: "Inventory management service"
+
+        - name: "payment-service"
+          ack_deadline_seconds: 120
+          retain_acked_messages: false
+          message_retention_duration: "86400s" # 1 day
+          description: "Payment processing service"
+
+        - name: "shipping-service"
+          ack_deadline_seconds: 300
+          retain_acked_messages: true
+          message_retention_duration: "1209600s" # 14 days
+          description: "Shipping and logistics service"
+
+    # Topic with push subscriptions (webhook endpoints)
+    - name: "notifications"
+      labels:
+        env: "dev"
+        service: "notification-system"
+        purpose: "alerts"
+      subscriptions:
+        - name: "email-notifications"
+          push_endpoint: "https://email-service.example.com/webhook"
+          oidc_service_account_email: "pubsub-service-account@dev-intern-poc.iam.gserviceaccount.com"
+          oidc_audience: "email-service-audience"
+          ack_deadline_seconds: 30
+          retry_min_backoff: "10s"
+          retry_max_backoff: "300s"
+          description: "Email notification service"
+
+        - name: "sms-notifications"
+          push_endpoint: "https://sms-service.example.com/webhook"
+          oidc_service_account_email: "pubsub-service-account@dev-intern-poc.iam.gserviceaccount.com"
+          oidc_audience: "sms-service-audience"
+          ack_deadline_seconds: 30
+          retry_min_backoff: "5s"
+          retry_max_backoff: "600s"
+          description: "SMS notification service"
+
+    # Topic with message filtering
+    - name: "sensor-data"
+      labels:
+        env: "dev"
+        service: "iot-platform"
+        purpose: "telemetry"
+      subscriptions:
+        - name: "temperature-monitoring"
+          filter: 'attributes.sensor_type="temperature"'
+          ack_deadline_seconds: 60
+          message_retention_duration: "2592000s" # 30 days
+          description: "Temperature sensor data processing"
+
+        - name: "humidity-monitoring"
+          filter: 'attributes.sensor_type="humidity"'
+          ack_deadline_seconds: 60
+          message_retention_duration: "2592000s" # 30 days
+          description: "Humidity sensor data processing"
+
+        - name: "alert-service"
+          filter: "attributes.value>80 OR attributes.value<10"
+          ack_deadline_seconds: 30
+          retry_min_backoff: "5s"
+          retry_max_backoff: "60s"
+          description: "Alert service for critical values"
+
+    # Topic with dead letter handling
+    - name: "critical-tasks"
+      labels:
+        env: "dev"
+        service: "task-processor"
+        purpose: "critical-workflows"
+      subscriptions:
+        - name: "task-processor"
+          dead_letter_topic: "failed-tasks"
+          max_delivery_attempts: 3
+          ack_deadline_seconds: 300
+          retry_min_backoff: "10s"
+          retry_max_backoff: "600s"
+          description: "Main task processing service"
+
+        - name: "backup-processor"
+          dead_letter_topic: "failed-tasks"
+          max_delivery_attempts: 5
+          ack_deadline_seconds: 600
+          retry_min_backoff: "30s"
+          retry_max_backoff: "1800s"
+          description: "Backup task processing service"
+
+    # Dead letter topic for failed messages
+    - name: "failed-tasks"
+      labels:
+        env: "dev"
+        service: "error-handling"
+        purpose: "dead-letters"
+      subscriptions:
+        - name: "error-logger"
+          ack_deadline_seconds: 60
+          message_retention_duration: "1209600s" # 14 days
+          description: "Log failed tasks for analysis"
+
+        - name: "admin-notifications"
+          push_endpoint: "https://admin-alerts.example.com/webhook"
+          oidc_service_account_email: "pubsub-service-account@dev-intern-poc.iam.gserviceaccount.com"
+          oidc_audience: "admin-alerts-audience"
+          ack_deadline_seconds: 30
+          description: "Notify administrators of failed tasks"
+
+    # Topic with expiration policy
+    - name: "temporary-data"
+      labels:
+        env: "dev"
+        service: "data-processing"
+        purpose: "temporary-storage"
+      subscriptions:
+        - name: "data-processor"
+          expiration_policy_ttl: "86400s" # 24 hours
+          ack_deadline_seconds: 60
+          message_retention_duration: "86400s" # 1 day
+          description: "Process temporary data with short TTL"
