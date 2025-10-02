@@ -113,6 +113,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Ensure .tf-runs directory exists
+          mkdir -p .tf-runs
+          echo "Created .tf-runs directory"
+
           FILES=( ${{ steps.parse.outputs.files }} )
           if [[ "${{ steps.parse.outputs.approve }}" == "yes" ]]; then
             # auto-approve applies by piping yes
@@ -127,6 +131,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Ensure .tf-runs directory exists
+          mkdir -p .tf-runs
+          echo "Created .tf-runs directory"
+
           FILES=( ${{ steps.parse.outputs.files }} )
           MSG="${{ github.event.head_commit.message }}"
           CHOICE=m
@@ -141,11 +149,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "Current directory: $(pwd)"
+          echo "Contents of .tf-runs:"
+          ls -la .tf-runs/ || echo "No .tf-runs directory found"
+          if [ -d ".tf-runs" ]; then
+            echo "Contents of .tf-runs subdirectories:"
+            find .tf-runs -type f -name "*.tf" -o -name "*.json" | head -20
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f .tf-runs || true
-          git commit -m "CI: persist tf state for ${{ steps.parse.outputs.files }} (action=${{ steps.parse.outputs.action }}, approve=${{ steps.parse.outputs.approve }})" || echo "No changes to commit"
-          git push || echo "Nothing pushed"
+
+          # Add all files in .tf-runs directory
+          if [ -d ".tf-runs" ]; then
+            git add -f .tf-runs/
+            echo "Added .tf-runs directory to git"
+          else
+            echo "No .tf-runs directory to add"
+          fi
+
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "CI: persist tf state for ${{ steps.parse.outputs.files }} (action=${{ steps.parse.outputs.action }}, approve=${{ steps.parse.outputs.approve }})"
+            echo "Committed changes"
+            git push
+            echo "Pushed changes to remote"
+          fi
 
       - name: Notify Slack (success)
         if: success()
