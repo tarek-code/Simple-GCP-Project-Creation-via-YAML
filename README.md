@@ -519,6 +519,8 @@ For questions or contributions, please open an issue or submit a pull request.
 - Cloud Functions (2nd gen)
 - GKE (Google Kubernetes Engine) cluster + node pool
 - Cloud Router, Cloud NAT
+ - Static IP (global/regional)
+ - Compute Disk
 
 ### YAML schema (excerpt)
 
@@ -832,6 +834,37 @@ resources:
   bigquery_datasets:
     - dataset_id: analytics
       location: US
+```
+
+#### Static IPs (list)
+```yaml
+resources:
+  static_ips:
+    # Global external address (omit region)
+    - name: web-ip-global
+      description: "Global external IP for LB"
+
+    # Regional internal address
+    - name: vm-internal-ip
+      address_type: INTERNAL            # EXTERNAL (default) or INTERNAL
+      region: us-central1               # required for regional
+      subnetwork: default               # for INTERNAL addresses
+      purpose: GCE_ENDPOINT             # optional, e.g. GCE_ENDPOINT, VPC_PEERING
+      description: "Internal IP for VM"
+```
+
+#### Compute disks (list)
+```yaml
+resources:
+  disks:
+    - name: data-disk-a
+      zone: us-central1-a
+      size_gb: 100
+      type: pd-ssd                      # pd-standard (default), pd-ssd, pd-balanced
+      labels: { role: data }
+      # image: projects/debian-cloud/global/images/family/debian-11  # optional
+      # snapshot: my-snap                                                 # optional
+      # kms_key_self_link: projects/..../cryptoKeys/my-key              # optional
 ```
 
 #### Cloud Functions (2nd gen) (list)

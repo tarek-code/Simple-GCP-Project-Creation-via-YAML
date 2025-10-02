@@ -324,6 +324,25 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
             ])
         )
 
+    # Static IPs (global/regional)
+    for i, ip in enumerate(resources.get("static_ips", []) or [], start=1):
+        blocks.append(
+            "\n".join([
+                f"module \"static_ip_{i}\" {{",
+                f"  source   = \"{mod_source('static_ip')}\"",
+                f"  project_id  = var.project_id",
+                f"  name        = \"{ip['name']}\"",
+                f"  address_type = {json.dumps(ip.get('address_type', 'EXTERNAL'))}",
+                f"  region       = {json.dumps(ip.get('region'))}",
+                f"  network_tier = {json.dumps(ip.get('network_tier'))}",
+                f"  subnetwork   = {json.dumps(ip.get('subnetwork'))}",
+                f"  purpose      = {json.dumps(ip.get('purpose'))}",
+                f"  address      = {json.dumps(ip.get('address'))}",
+                f"  description  = {json.dumps(ip.get('description'))}",
+                f"}}\n",
+            ])
+        )
+
     # Compute instances (VMs)
     for i, vm in enumerate(resources.get("compute_instances", []) or [], start=1):
         depends_lines: List[str] = []
@@ -347,6 +366,25 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
         block_lines.extend(depends_lines)
         block_lines.append("}\n")
         blocks.append("\n".join(block_lines))
+
+    # Standalone persistent disks
+    for i, dk in enumerate(resources.get("disks", []) or [], start=1):
+        blocks.append(
+            "\n".join([
+                f"module \"disk_{i}\" {{",
+                f"  source   = \"{mod_source('compute_disk')}\"",
+                f"  project_id = var.project_id",
+                f"  name     = \"{dk['name']}\"",
+                f"  zone     = \"{dk.get('zone', 'us-central1-a')}\"",
+                f"  size_gb  = {int(dk.get('size_gb', 10))}",
+                f"  type     = {json.dumps(dk.get('type', 'pd-standard'))}",
+                f"  image    = {json.dumps(dk.get('image'))}",
+                f"  snapshot = {json.dumps(dk.get('snapshot'))}",
+                f"  labels   = {json.dumps(dk.get('labels', {}))}",
+                f"  kms_key_self_link = {json.dumps(dk.get('kms_key_self_link'))}",
+                f"}}\n",
+            ])
+        )
 
     # BigQuery datasets
     for i, ds in enumerate(resources.get("bigquery_datasets", []) or [], start=1):
