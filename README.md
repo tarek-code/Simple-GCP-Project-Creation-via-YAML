@@ -1004,15 +1004,64 @@ resources:
 ```yaml
 resources:
   disks:
-    - name: data-disk-a
-      zone: us-central1-a
+    # Standard persistent disk
+    - name: "data-disk-a"
+      zone: "us-central1-a"
       size_gb: 100
-      type: pd-ssd                      # pd-standard (default), pd-ssd, pd-balanced
-      labels: { role: data }
-      # image: projects/debian-cloud/global/images/family/debian-11  # optional
-      # snapshot: my-snap                                                 # optional
-      # kms_key_self_link: projects/..../cryptoKeys/my-key              # optional
+      type: "pd-standard"                # pd-standard, pd-ssd, pd-balanced
+      labels: { role: "data", env: "prod" }
+    
+    # SSD persistent disk
+    - name: "cache-disk-b"
+      zone: "us-central1-a"
+      size_gb: 50
+      type: "pd-ssd"
+      labels: { role: "cache", env: "prod" }
+    
+    # Balanced persistent disk
+    - name: "app-disk-c"
+      zone: "us-central1-a"
+      size_gb: 200
+      type: "pd-balanced"
+      labels: { role: "application", env: "prod" }
+    
+    # Disk from image
+    - name: "boot-disk-d"
+      zone: "us-central1-a"
+      size_gb: 20
+      type: "pd-ssd"
+      image: "projects/debian-cloud/global/images/family/debian-11"
+      labels: { role: "boot", env: "dev" }
+    
+    # Disk from snapshot
+    - name: "restored-disk-e"
+      zone: "us-central1-a"
+      size_gb: 150
+      type: "pd-standard"
+      snapshot: "my-backup-snapshot"
+      labels: { role: "restored", env: "dev" }
+    
+    # Encrypted disk
+    - name: "secure-disk-f"
+      zone: "us-central1-a"
+      size_gb: 100
+      type: "pd-ssd"
+      kms_key_self_link: "projects/my-project/locations/us-central1/keyRings/my-ring/cryptoKeys/my-key"
+      labels: { role: "secure", env: "prod" }
 ```
+
+**Disk Types:**
+- **pd-standard**: Standard persistent disk (HDD)
+- **pd-ssd**: SSD persistent disk (high performance)
+- **pd-balanced**: Balanced persistent disk (cost-effective SSD)
+
+**Key Features:**
+- **Size**: Configurable disk size in GB
+- **Zone**: Must match VM zone for attachment
+- **Image**: Create disk from existing image
+- **Snapshot**: Restore disk from snapshot
+- **Encryption**: Customer-managed encryption keys (CMEK)
+- **Labels**: Custom metadata for organization
 
 #### Cloud Functions (2nd gen) (list)
 ```yaml

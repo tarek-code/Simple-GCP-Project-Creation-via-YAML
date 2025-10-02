@@ -23,341 +23,275 @@ module "project" {
 
 
 # Additional resources from YAML
-module "storage_bucket_1" {
-  source  = "../../modules/storage_bucket"
+module "disk_1" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  name        = "web-app-assets-bucket"
-  location    = "US"
-  uniform_bucket_level_access = true
-  enable_versioning = false
-  force_destroy = false
-  storage_class = null
-  public_access_prevention = null
-  default_kms_key_name = null
-  logging = null
-  cors = []
-  lifecycle_rules = []
-  retention_policy = null
-  labels = {"purpose": "web-assets", "service": "web-app"}
+  name     = "data-storage-disk"
+  zone     = "us-central1-a"
+  size_gb  = 100
+  type     = "pd-standard"
+  image    = null
+  snapshot = null
+  labels   = {"role": "data-storage", "env": "dev", "purpose": "general-data"}
+  kms_key_self_link = null
 }
 
-module "storage_bucket_2" {
-  source  = "../../modules/storage_bucket"
+module "disk_2" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  name        = "backup-storage-bucket"
-  location    = "US"
-  uniform_bucket_level_access = true
-  enable_versioning = false
-  force_destroy = false
-  storage_class = null
-  public_access_prevention = null
-  default_kms_key_name = null
-  logging = null
-  cors = []
-  lifecycle_rules = []
-  retention_policy = null
-  labels = {"purpose": "backups", "service": "backup-service"}
+  name     = "cache-disk"
+  zone     = "us-central1-a"
+  size_gb  = 50
+  type     = "pd-ssd"
+  image    = null
+  snapshot = null
+  labels   = {"role": "cache", "env": "dev", "purpose": "high-performance-cache"}
+  kms_key_self_link = null
 }
 
-module "service_account_1" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "web-app-service"
-  display_name = "Web Application Service Account"
-  description  = "Service account for web application operations and API access"
-}
-
-module "service_account_2" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "database-service"
-  display_name = "Database Service Account"
-  description  = "Service account for database connections and operations"
-}
-
-module "service_account_3" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "cicd-pipeline"
-  display_name = "CI/CD Pipeline Service Account"
-  description  = "Service account for continuous integration and deployment"
-}
-
-module "service_account_4" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "monitoring-agent"
-  display_name = "Monitoring Agent Service Account"
-  description  = "Service account for monitoring, logging, and metrics collection"
-}
-
-module "service_account_5" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "storage-service"
-  display_name = "Storage Service Account"
-  description  = "Service account for file storage operations and backups"
-}
-
-module "service_account_6" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "pubsub-service"
-  display_name = "Pub/Sub Service Account"
-  description  = "Service account for message publishing and subscription"
-}
-
-module "service_account_7" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "compute-service"
-  display_name = "Compute Service Account"
-  description  = "Service account for VM and container operations"
-}
-
-module "service_account_8" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "security-service"
-  display_name = "Security Service Account"
-  description  = "Service account for security scanning and compliance checks"
-}
-
-module "service_account_9" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "analytics-service"
-  display_name = "Analytics Service Account"
-  description  = "Service account for data analytics and reporting"
-}
-
-module "service_account_10" {
-  source  = "../../modules/service_account"
-  project_id   = var.project_id
-  account_id   = "backup-service"
-  display_name = "Backup Service Account"
-  description  = "Service account for automated backup operations"
-}
-
-module "iam_binding_1" {
-  source  = "../../modules/iam_binding"
+module "disk_3" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:web-app-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "app-data-disk"
+  zone     = "us-central1-a"
+  size_gb  = 200
+  type     = "pd-balanced"
+  image    = null
+  snapshot = null
+  labels   = {"role": "application", "env": "dev", "purpose": "app-storage"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_2" {
-  source  = "../../modules/iam_binding"
+module "disk_4" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/pubsub.subscriber"
-  member  = "serviceAccount:web-app-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "boot-disk-debian"
+  zone     = "us-central1-a"
+  size_gb  = 20
+  type     = "pd-ssd"
+  image    = "projects/debian-cloud/global/images/family/debian-11"
+  snapshot = null
+  labels   = {"role": "boot", "env": "dev", "os": "debian-11"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_3" {
-  source  = "../../modules/iam_binding"
+module "disk_5" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:database-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "boot-disk-ubuntu"
+  zone     = "us-central1-a"
+  size_gb  = 25
+  type     = "pd-balanced"
+  image    = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2004-lts"
+  snapshot = null
+  labels   = {"role": "boot", "env": "dev", "os": "ubuntu-20.04"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_4" {
-  source  = "../../modules/iam_binding"
+module "disk_6" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/cloudsql.instanceUser"
-  member  = "serviceAccount:database-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "database-disk"
+  zone     = "us-central1-a"
+  size_gb  = 500
+  type     = "pd-ssd"
+  image    = null
+  snapshot = null
+  labels   = {"role": "database", "env": "dev", "purpose": "postgresql-data"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_5" {
-  source  = "../../modules/iam_binding"
+module "disk_7" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/cloudbuild.builds.builder"
-  member  = "serviceAccount:cicd-pipeline@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "backup-disk"
+  zone     = "us-central1-a"
+  size_gb  = 1000
+  type     = "pd-standard"
+  image    = null
+  snapshot = null
+  labels   = {"role": "backup", "env": "dev", "purpose": "daily-backups"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_6" {
-  source  = "../../modules/iam_binding"
+module "disk_8" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/container.developer"
-  member  = "serviceAccount:cicd-pipeline@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "log-disk"
+  zone     = "us-central1-a"
+  size_gb  = 100
+  type     = "pd-standard"
+  image    = null
+  snapshot = null
+  labels   = {"role": "logging", "env": "dev", "purpose": "application-logs"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_7" {
-  source  = "../../modules/iam_binding"
+module "disk_9" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/storage.admin"
-  member  = "serviceAccount:cicd-pipeline@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "temp-processing-disk"
+  zone     = "us-central1-a"
+  size_gb  = 200
+  type     = "pd-balanced"
+  image    = null
+  snapshot = null
+  labels   = {"role": "temporary", "env": "dev", "purpose": "data-processing"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_8" {
-  source  = "../../modules/iam_binding"
+module "disk_10" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:monitoring-agent@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "dev-test-disk"
+  zone     = "us-central1-a"
+  size_gb  = 50
+  type     = "pd-standard"
+  image    = null
+  snapshot = null
+  labels   = {"role": "development", "env": "dev", "purpose": "testing"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_9" {
-  source  = "../../modules/iam_binding"
+module "disk_11" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:monitoring-agent@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "data-disk-central-b"
+  zone     = "us-central1-b"
+  size_gb  = 150
+  type     = "pd-balanced"
+  image    = null
+  snapshot = null
+  labels   = {"role": "data-storage", "env": "dev", "zone": "central-b"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_10" {
-  source  = "../../modules/iam_binding"
+module "disk_12" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/monitoring.viewer"
-  member  = "serviceAccount:monitoring-agent@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "data-disk-central-c"
+  zone     = "us-central1-c"
+  size_gb  = 150
+  type     = "pd-balanced"
+  image    = null
+  snapshot = null
+  labels   = {"role": "data-storage", "env": "dev", "zone": "central-c"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_11" {
-  source  = "../../modules/iam_binding"
+module "disk_13" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/storage.objectAdmin"
-  member  = "serviceAccount:storage-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "analytics-disk"
+  zone     = "us-central1-a"
+  size_gb  = 1000
+  type     = "pd-ssd"
+  image    = null
+  snapshot = null
+  labels   = {"role": "analytics", "env": "dev", "purpose": "big-data-processing"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_12" {
-  source  = "../../modules/iam_binding"
+module "disk_14" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/storage.legacyBucketReader"
-  member  = "serviceAccount:storage-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "archive-disk"
+  zone     = "us-central1-a"
+  size_gb  = 2000
+  type     = "pd-standard"
+  image    = null
+  snapshot = null
+  labels   = {"role": "archive", "env": "dev", "purpose": "long-term-storage"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_13" {
-  source  = "../../modules/iam_binding"
+module "disk_15" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:pubsub-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "monitoring-disk"
+  zone     = "us-central1-a"
+  size_gb  = 100
+  type     = "pd-balanced"
+  image    = null
+  snapshot = null
+  labels   = {"role": "monitoring", "env": "dev", "purpose": "metrics-storage"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_14" {
-  source  = "../../modules/iam_binding"
+module "disk_16" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/pubsub.subscriber"
-  member  = "serviceAccount:pubsub-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "security-audit-disk"
+  zone     = "us-central1-a"
+  size_gb  = 200
+  type     = "pd-ssd"
+  image    = null
+  snapshot = null
+  labels   = {"role": "security", "env": "dev", "purpose": "audit-logs"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_15" {
-  source  = "../../modules/iam_binding"
+module "disk_17" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/pubsub.admin"
-  member  = "serviceAccount:pubsub-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "container-volume-disk"
+  zone     = "us-central1-a"
+  size_gb  = 300
+  type     = "pd-balanced"
+  image    = null
+  snapshot = null
+  labels   = {"role": "container", "env": "dev", "purpose": "docker-volumes"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_16" {
-  source  = "../../modules/iam_binding"
+module "disk_18" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/compute.instanceAdmin"
-  member  = "serviceAccount:compute-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "cicd-artifacts-disk"
+  zone     = "us-central1-a"
+  size_gb  = 500
+  type     = "pd-standard"
+  image    = null
+  snapshot = null
+  labels   = {"role": "cicd", "env": "dev", "purpose": "build-artifacts"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_17" {
-  source  = "../../modules/iam_binding"
+module "disk_19" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/compute.networkAdmin"
-  member  = "serviceAccount:compute-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "ml-datasets-disk"
+  zone     = "us-central1-a"
+  size_gb  = 2000
+  type     = "pd-ssd"
+  image    = null
+  snapshot = null
+  labels   = {"role": "machine-learning", "env": "dev", "purpose": "training-datasets"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_18" {
-  source  = "../../modules/iam_binding"
+module "disk_20" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/securitycenter.findingsEditor"
-  member  = "serviceAccount:security-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
+  name     = "web-content-disk"
+  zone     = "us-central1-a"
+  size_gb  = 100
+  type     = "pd-balanced"
+  image    = null
+  snapshot = null
+  labels   = {"role": "web-server", "env": "dev", "purpose": "static-content"}
+  kms_key_self_link = null
 }
 
-module "iam_binding_19" {
-  source  = "../../modules/iam_binding"
+module "disk_21" {
+  source   = "../../modules/compute_disk"
   project_id = var.project_id
-  role    = "roles/cloudasset.viewer"
-  member  = "serviceAccount:security-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
-}
-
-module "iam_binding_20" {
-  source  = "../../modules/iam_binding"
-  project_id = var.project_id
-  role    = "roles/bigquery.dataViewer"
-  member  = "serviceAccount:analytics-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
-}
-
-module "iam_binding_21" {
-  source  = "../../modules/iam_binding"
-  project_id = var.project_id
-  role    = "roles/bigquery.jobUser"
-  member  = "serviceAccount:analytics-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
-}
-
-module "iam_binding_22" {
-  source  = "../../modules/iam_binding"
-  project_id = var.project_id
-  role    = "roles/storage.objectAdmin"
-  member  = "serviceAccount:backup-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
-}
-
-module "iam_binding_23" {
-  source  = "../../modules/iam_binding"
-  project_id = var.project_id
-  role    = "roles/compute.storageAdmin"
-  member  = "serviceAccount:backup-service@dev-intern-poc.iam.gserviceaccount.com"
-  members = []
-  condition = null
-}
-
-module "pubsub_topic_1" {
-  source  = "../../modules/pubsub"
-  project_id = var.project_id
-  name    = "web-app-events"
-  labels  = {"service": "web-app", "purpose": "events"}
-  subscriptions = []
-}
-
-module "pubsub_topic_2" {
-  source  = "../../modules/pubsub"
-  project_id = var.project_id
-  name    = "monitoring-alerts"
-  labels  = {"service": "monitoring", "purpose": "alerts"}
-  subscriptions = []
+  name     = "api-data-disk"
+  zone     = "us-central1-a"
+  size_gb  = 250
+  type     = "pd-balanced"
+  image    = null
+  snapshot = null
+  labels   = {"role": "api-server", "env": "dev", "purpose": "application-data"}
+  kms_key_self_link = null
 }

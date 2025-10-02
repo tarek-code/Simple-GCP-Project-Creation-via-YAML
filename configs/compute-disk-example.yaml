@@ -1,0 +1,227 @@
+# Compute Disk Example Configuration
+project_id: "dev-intern-poc"
+organization_id: null
+billing_account: "01783B-A7A65B-153181"
+
+labels:
+  owner: "intern"
+  environment: "dev"
+  purpose: "compute-disk-demo"
+
+apis:
+  - compute.googleapis.com
+  - iam.googleapis.com
+
+resources:
+  # Compute Disks with various configurations
+  disks:
+    # Standard persistent disk for data storage
+    - name: "data-storage-disk"
+      zone: "us-central1-a"
+      size_gb: 100
+      type: "pd-standard"
+      labels:
+        role: "data-storage"
+        env: "dev"
+        purpose: "general-data"
+
+    # SSD disk for high-performance cache
+    - name: "cache-disk"
+      zone: "us-central1-a"
+      size_gb: 50
+      type: "pd-ssd"
+      labels:
+        role: "cache"
+        env: "dev"
+        purpose: "high-performance-cache"
+
+    # Balanced disk for application data
+    - name: "app-data-disk"
+      zone: "us-central1-a"
+      size_gb: 200
+      type: "pd-balanced"
+      labels:
+        role: "application"
+        env: "dev"
+        purpose: "app-storage"
+
+    # Boot disk from Debian image
+    - name: "boot-disk-debian"
+      zone: "us-central1-a"
+      size_gb: 20
+      type: "pd-ssd"
+      image: "projects/debian-cloud/global/images/family/debian-11"
+      labels:
+        role: "boot"
+        env: "dev"
+        os: "debian-11"
+
+    # Boot disk from Ubuntu image
+    - name: "boot-disk-ubuntu"
+      zone: "us-central1-a"
+      size_gb: 25
+      type: "pd-balanced"
+      image: "projects/ubuntu-os-cloud/global/images/family/ubuntu-2004-lts"
+      labels:
+        role: "boot"
+        env: "dev"
+        os: "ubuntu-20.04"
+
+    # Database disk with high performance
+    - name: "database-disk"
+      zone: "us-central1-a"
+      size_gb: 500
+      type: "pd-ssd"
+      labels:
+        role: "database"
+        env: "dev"
+        purpose: "postgresql-data"
+
+    # Backup disk with large capacity
+    - name: "backup-disk"
+      zone: "us-central1-a"
+      size_gb: 1000
+      type: "pd-standard"
+      labels:
+        role: "backup"
+        env: "dev"
+        purpose: "daily-backups"
+
+    # Log disk for application logs
+    - name: "log-disk"
+      zone: "us-central1-a"
+      size_gb: 100
+      type: "pd-standard"
+      labels:
+        role: "logging"
+        env: "dev"
+        purpose: "application-logs"
+
+    # Temporary disk for processing
+    - name: "temp-processing-disk"
+      zone: "us-central1-a"
+      size_gb: 200
+      type: "pd-balanced"
+      labels:
+        role: "temporary"
+        env: "dev"
+        purpose: "data-processing"
+
+    # Development disk for testing
+    - name: "dev-test-disk"
+      zone: "us-central1-a"
+      size_gb: 50
+      type: "pd-standard"
+      labels:
+        role: "development"
+        env: "dev"
+        purpose: "testing"
+
+    # Multi-zone disk in different zones
+    - name: "data-disk-central-b"
+      zone: "us-central1-b"
+      size_gb: 150
+      type: "pd-balanced"
+      labels:
+        role: "data-storage"
+        env: "dev"
+        zone: "central-b"
+
+    - name: "data-disk-central-c"
+      zone: "us-central1-c"
+      size_gb: 150
+      type: "pd-balanced"
+      labels:
+        role: "data-storage"
+        env: "dev"
+        zone: "central-c"
+
+    # High-performance disk for analytics
+    - name: "analytics-disk"
+      zone: "us-central1-a"
+      size_gb: 1000
+      type: "pd-ssd"
+      labels:
+        role: "analytics"
+        env: "dev"
+        purpose: "big-data-processing"
+
+    # Archive disk for long-term storage
+    - name: "archive-disk"
+      zone: "us-central1-a"
+      size_gb: 2000
+      type: "pd-standard"
+      labels:
+        role: "archive"
+        env: "dev"
+        purpose: "long-term-storage"
+
+    # Monitoring disk for metrics
+    - name: "monitoring-disk"
+      zone: "us-central1-a"
+      size_gb: 100
+      type: "pd-balanced"
+      labels:
+        role: "monitoring"
+        env: "dev"
+        purpose: "metrics-storage"
+
+    # Security disk for audit logs
+    - name: "security-audit-disk"
+      zone: "us-central1-a"
+      size_gb: 200
+      type: "pd-ssd"
+      labels:
+        role: "security"
+        env: "dev"
+        purpose: "audit-logs"
+
+    # Container disk for Docker volumes
+    - name: "container-volume-disk"
+      zone: "us-central1-a"
+      size_gb: 300
+      type: "pd-balanced"
+      labels:
+        role: "container"
+        env: "dev"
+        purpose: "docker-volumes"
+
+    # CI/CD disk for build artifacts
+    - name: "cicd-artifacts-disk"
+      zone: "us-central1-a"
+      size_gb: 500
+      type: "pd-standard"
+      labels:
+        role: "cicd"
+        env: "dev"
+        purpose: "build-artifacts"
+
+    # Machine learning disk for datasets
+    - name: "ml-datasets-disk"
+      zone: "us-central1-a"
+      size_gb: 2000
+      type: "pd-ssd"
+      labels:
+        role: "machine-learning"
+        env: "dev"
+        purpose: "training-datasets"
+
+    # Web server disk for static content
+    - name: "web-content-disk"
+      zone: "us-central1-a"
+      size_gb: 100
+      type: "pd-balanced"
+      labels:
+        role: "web-server"
+        env: "dev"
+        purpose: "static-content"
+
+    # API server disk for application data
+    - name: "api-data-disk"
+      zone: "us-central1-a"
+      size_gb: 250
+      type: "pd-balanced"
+      labels:
+        role: "api-server"
+        env: "dev"
+        purpose: "application-data"
