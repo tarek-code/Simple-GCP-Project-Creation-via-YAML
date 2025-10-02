@@ -1,19 +1,10 @@
 # Terraform files
-*.tfstate
-*.tfstate.*
-*.tfvars
-*.tfvars.json
 .terraform/
-.tf-runs/
 .terraform.lock.hcl
 crash.log
 crash.*.log
 
 # Google Cloud credentials
-*.json
-!configs/*.yaml
-!configs/*.yml
-
 # IDE files
 .vscode/
 .idea/

@@ -160,10 +160,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Add all files in .tf-runs directory
+          # Add only Terraform source files, not .terraform directory
           if [ -d ".tf-runs" ]; then
-            git add -f .tf-runs/
-            echo "Added .tf-runs directory to git"
+            # Add .tf and .json files but exclude .terraform directory
+            find .tf-runs -name "*.tf" -o -name "*.json" | grep -v ".terraform" | xargs git add -f
+            echo "Added Terraform source files to git (excluding .terraform directory)"
           else
             echo "No .tf-runs directory to add"
           fi
