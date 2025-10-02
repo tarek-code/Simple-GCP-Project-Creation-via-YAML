@@ -1,0 +1,84 @@
+# Static IP Examples Configuration
+project_id: "dev-intern-poc"
+organization_id: null
+billing_account: "01783B-A7A65B-153181"
+
+labels:
+  owner: "intern"
+  environment: "dev"
+  purpose: "static-ip-demo"
+
+apis:
+  - compute.googleapis.com
+  - iam.googleapis.com
+
+resources:
+  # VPC Network (required for internal IPs)
+  vpcs:
+    - name: "demo-vpc"
+      auto_create_subnetworks: false
+      description: "VPC for static IP demonstration"
+
+  # Subnetworks (required for internal IPs)
+  subnets:
+    - name: "demo-subnet"
+      network: "demo-vpc"
+      region: "us-central1"
+      ip_cidr_range: "10.0.0.0/24"
+      description: "Subnet for static IP demonstration"
+      private_ip_google_access: true
+
+  # Static IP Examples
+  static_ips:
+    # External Regional Static IP
+    - name: "web-server-external-ip"
+      address_type: "EXTERNAL"
+      region: "us-central1"
+      description: "External static IP for web server"
+      network_tier: "PREMIUM"
+
+    # External Global Static IP (no region specified)
+    - name: "global-lb-ip"
+      address_type: "EXTERNAL"
+      description: "Global static IP for load balancer"
+      network_tier: "PREMIUM"
+
+    # Internal Regional Static IP
+    - name: "internal-api-ip"
+      address_type: "INTERNAL"
+      region: "us-central1"
+      subnetwork: "demo-subnet"
+      purpose: "GCE_ENDPOINT"
+      description: "Internal static IP for API server"
+
+    # Internal IP with specific address
+    - name: "database-internal-ip"
+      address_type: "INTERNAL"
+      region: "us-central1"
+      subnetwork: "demo-subnet"
+      address: "10.0.0.100"
+      purpose: "GCE_ENDPOINT"
+      description: "Internal static IP for database (fixed address)"
+
+    # VPC Peering Internal IP
+    - name: "peering-internal-ip"
+      address_type: "INTERNAL"
+      region: "us-central1"
+      subnetwork: "demo-subnet"
+      purpose: "VPC_PEERING"
+      description: "Internal IP for VPC peering"
+
+  # Compute Instance using static IP
+  compute_instances:
+    - name: "web-server"
+      machine_type: "e2-micro"
+      zone: "us-central1-a"
+      image: "debian-cloud/debian-11"
+      subnetwork: "demo-subnet"
+      # Reference the static IP by name
+      external_ip: "web-server-external-ip"
+      internal_ip: "internal-api-ip"
+      tags: ["web", "http-server"]
+      labels:
+        role: "web-server"
+        environment: "demo"

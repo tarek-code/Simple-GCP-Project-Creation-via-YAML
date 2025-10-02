@@ -1,22 +1,5 @@
-resource "google_compute_address" "ip" {
-  project      = var.project_id
-  name         = var.name
-  address_type = var.address_type
-
-  description = var.description
-  address     = var.address
-
-  # Regional vs Global
-  dynamic "region" {
-    for_each = var.region == null ? [] : [var.region]
-    content {
-      # This dynamic block pattern is not valid for simple attributes; use conditional locals instead
-    }
-  }
-}
-
 locals {
-  is_regional = var.region != null && length(trim(var.region)) > 0
+  is_regional = var.region != null && var.region != ""
 }
 
 resource "google_compute_address" "ip_regional" {
