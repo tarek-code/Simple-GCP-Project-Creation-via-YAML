@@ -1,6 +1,8 @@
 name: Infrastructure Deploy/Destroy
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       action:
@@ -9,10 +11,10 @@ on:
         default: deploy
       files:
         description: space-separated YAML paths (e.g., configs/a.yaml configs/b.yaml)
-        required: true
+        required: false
       approve:
         description: yes to auto-apply / non-interactive
-        required: true
+        required: false
         default: "no"
 
 permissions:
@@ -56,25 +58,97 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Parse workflow inputs
+      - name: Parse intent and files from commit message
         id: parse
         shell: bash
         run: |
           set -euo pipefail
-          ACTION="${{ github.event.inputs.action }}"
-          APPROVE="${{ github.event.inputs.approve }}"
-          FILES="${{ github.event.inputs.files }}"
-
+          MSG="${{ github.event.head_commit.message }}"
+          ACTION=""
+          APPROVE="no"
+          FILES=""
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ACTION="${{ github.event.inputs.action }}"
+            APPROVE="${{ github.event.inputs.approve }}"
+            FILES="${{ github.event.inputs.files }}"
+          else
+            # Clean up the message - remove extra spaces and convert to lowercase
+            MSG_CLEAN=$(echo "$MSG" | tr -s ' ' | tr '[:upper:]' '[:lower:]')
+            echo "Cleaned message: '$MSG_CLEAN'"
+            
+            # Check for exact patterns
+            if [[ "$MSG_CLEAN" =~ ^deploy[[:space:]]*$ ]]; then
+              # "deploy" only - all yaml files, plan only
+              ACTION="deploy"
+              APPROVE="no"
+              RANGE="${{ github.event.before }}..${{ github.sha }}"
+              FILES=$(git diff --name-only $RANGE | grep -E '^configs/.+\.(yaml|yml)$' || true)
+            elif [[ "$MSG_CLEAN" =~ ^deploy[[:space:]]+yes[[:space:]]*$ ]]; then
+              # "deploy yes" - all yaml files, apply
+              ACTION="deploy"
+              APPROVE="yes"
+              RANGE="${{ github.event.before }}..${{ github.sha }}"
+              FILES=$(git diff --name-only $RANGE | grep -E '^configs/.+\.(yaml|yml)$' || true)
+            elif [[ "$MSG_CLEAN" =~ ^deploy[[:space:]]+configs/[a-z0-9_./\-]+\.(yaml|yml)[[:space:]]*$ ]]; then
+              # "deploy configs/file.yaml" - specific file, plan only
+              ACTION="deploy"
+              APPROVE="no"
+              FILES=$(echo "$MSG_CLEAN" | grep -oE 'configs/[a-z0-9_./\-]+\.(yaml|yml)' || true)
+            elif [[ "$MSG_CLEAN" =~ ^deploy[[:space:]]+configs/[a-z0-9_./\-]+\.(yaml|yml)[[:space:]]+yes[[:space:]]*$ ]]; then
+              # "deploy configs/file.yaml yes" - specific file, apply
+              ACTION="deploy"
+              APPROVE="yes"
+              FILES=$(echo "$MSG_CLEAN" | grep -oE 'configs/[a-z0-9_./\-]+\.(yaml|yml)' || true)
+            elif [[ "$MSG_CLEAN" =~ ^destroy[[:space:]]*$ ]]; then
+              # "destroy" only - all yaml files, plan only
+              ACTION="destroy"
+              APPROVE="no"
+              RANGE="${{ github.event.before }}..${{ github.sha }}"
+              FILES=$(git diff --name-only $RANGE | grep -E '^configs/.+\.(yaml|yml)$' || true)
+            elif [[ "$MSG_CLEAN" =~ ^destroy[[:space:]]+yes[[:space:]]*$ ]]; then
+              # "destroy yes" - all yaml files, apply
+              ACTION="destroy"
+              APPROVE="yes"
+              RANGE="${{ github.event.before }}..${{ github.sha }}"
+              FILES=$(git diff --name-only $RANGE | grep -E '^configs/.+\.(yaml|yml)$' || true)
+            elif [[ "$MSG_CLEAN" =~ ^destroy[[:space:]]+configs/[a-z0-9_./\-]+\.(yaml|yml)[[:space:]]*$ ]]; then
+              # "destroy configs/file.yaml" - specific file, plan only
+              ACTION="destroy"
+              APPROVE="no"
+              FILES=$(echo "$MSG_CLEAN" | grep -oE 'configs/[a-z0-9_./\-]+\.(yaml|yml)' || true)
+            elif [[ "$MSG_CLEAN" =~ ^destroy[[:space:]]+configs/[a-z0-9_./\-]+\.(yaml|yml)[[:space:]]+yes[[:space:]]*$ ]]; then
+              # "destroy configs/file.yaml yes" - specific file, apply
+              ACTION="destroy"
+              APPROVE="yes"
+              FILES=$(echo "$MSG_CLEAN" | grep -oE 'configs/[a-z0-9_./\-]+\.(yaml|yml)' || true)
+            else
+              # No valid pattern found
+              ACTION=""
+              APPROVE="no"
+              FILES=""
+            fi
+          fi
           echo "action=$ACTION" >> $GITHUB_OUTPUT
           echo "approve=$APPROVE" >> $GITHUB_OUTPUT
           echo "files=$FILES" >> $GITHUB_OUTPUT
           printf "Parsed action='%s' approve='%s' files=\n%s\n" "$ACTION" "$APPROVE" "$FILES"
 
+      - name: Short-circuit if no action detected
+        if: steps.parse.outputs.action == ''
+        run: |
+          echo "No deploy/destroy action detected in commit. Skipping."
+          exit 0
+
+      - name: Short-circuit if no config files detected
+        if: steps.parse.outputs.files == ''
+        run: |
+          echo "No configs/*.yaml detected in commit or workflow inputs. Skipping."
+          exit 0
+
       - name: Show plan-only note for destroy without approve
         if: steps.parse.outputs.action == 'destroy' && steps.parse.outputs.approve != 'yes'
         run: |
-          echo "Destroy requires approve=yes. Skipping destructive run."
-          exit 0
+          echo "Destroy will run in plan-only mode (no actual destruction)."
 
       - name: Run deploy (plan-only unless approve=yes)
         if: steps.parse.outputs.action == 'deploy'
@@ -94,8 +168,8 @@ jobs:
             yes no | python scripts/deploy.py "${FILES[@]}" || true
           fi
 
-      - name: Run destroy (modules by default; add 'project' in commit to delete project)
-        if: steps.parse.outputs.action == 'destroy' && steps.parse.outputs.approve == 'yes'
+      - name: Run destroy (plan-only unless approve=yes)
+        if: steps.parse.outputs.action == 'destroy'
         shell: bash
         run: |
           set -euo pipefail
@@ -104,13 +178,19 @@ jobs:
           echo "Created .tf-runs directory"
 
           FILES=( ${{ steps.parse.outputs.files }} )
-          MSG="${{ github.event.head_commit.message }}"
-          CHOICE=m
-          shopt -s nocasematch
-          [[ "$MSG" =~ project ]] && CHOICE=p || true
-          shopt -u nocasematch
-          # feed: yes then choice m/p
-          { echo yes; echo "$CHOICE"; } | python scripts/destroy.py "${FILES[@]}"
+          if [[ "${{ steps.parse.outputs.approve }}" == "yes" ]]; then
+            # auto-approve applies by piping yes
+            MSG="${{ github.event.head_commit.message }}"
+            CHOICE=m
+            shopt -s nocasematch
+            [[ "$MSG" =~ project ]] && CHOICE=p || true
+            shopt -u nocasematch
+            # feed: yes then choice m/p
+            { echo yes; echo "$CHOICE"; } | python scripts/destroy.py "${FILES[@]}"
+          else
+            # ensure plan-only by piping no responses
+            yes no | python scripts/destroy.py "${FILES[@]}" || true
+          fi
 
       - name: Persist .tf-runs into repo
         if: always()
