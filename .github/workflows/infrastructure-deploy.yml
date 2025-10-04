@@ -116,7 +116,7 @@ jobs:
               ACTION="destroy"
               APPROVE="no"
               FILES=$(echo "$MSG_CLEAN" | grep -oE 'configs/[a-z0-9_./\-]+\.(yaml|yml)' || true)
-            elif [[ "$MSG_CLEAN" =~ ^destroy[[:space:]]+configs/[a-z0-9_./\-]+\.(yaml|yml)[[:space:]]+yes[[:space:]]*$ ]]; then
+            elif [[ "$MSG_CLEAN" =~ ^destroy[[:space:]]+configs/[a-z0-9_./\-]+\.(yaml|yml)[[:space:]]+yes.*$ ]]; then
               # "destroy configs/file.yaml yes" - specific file, apply
               ACTION="destroy"
               APPROVE="yes"
