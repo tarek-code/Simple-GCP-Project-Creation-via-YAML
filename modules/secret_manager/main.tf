@@ -5,7 +5,7 @@ resource "google_secret_manager_secret" "secret" {
     for_each = [1]
     content {
       dynamic "auto" {
-        for_each = var.replication == null || try(var.replication.auto, true) ? [1] : []
+        for_each = var.replication == null || try(var.replication.auto, false) == true ? [1] : []
         content {}
       }
       dynamic "user_managed" {
@@ -15,8 +15,11 @@ resource "google_secret_manager_secret" "secret" {
             for_each = var.replication.user_managed
             content {
               location = replicas.value.location
-              customer_managed_encryption {
-                kms_key_name = try(replicas.value.kms_key_name, null)
+              dynamic "customer_managed_encryption" {
+                for_each = try(replicas.value.kms_key_name, null) != null ? [1] : []
+                content {
+                  kms_key_name = replicas.value.kms_key_name
+                }
               }
             }
           }

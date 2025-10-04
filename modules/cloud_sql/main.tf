@@ -59,10 +59,7 @@ resource "google_sql_database_instance" "instance" {
     }
   }
 
-  dynamic "encryption_key_name" {
-    for_each = var.kms_key_name == null ? [] : [1]
-    content  = var.kms_key_name
-  }
+  encryption_key_name = var.kms_key_name
 }
 
 

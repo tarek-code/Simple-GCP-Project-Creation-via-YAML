@@ -28,8 +28,8 @@ resource "google_compute_firewall" "rules" {
   }
 
   source_ranges           = var.source_ranges
-  target_tags             = var.target_tags
-  target_service_accounts = var.target_service_accounts
+  target_tags             = length(var.target_tags) > 0 ? var.target_tags : null
+  target_service_accounts = length(var.target_service_accounts) > 0 ? var.target_service_accounts : null
   destination_ranges      = var.destination_ranges
 }
 

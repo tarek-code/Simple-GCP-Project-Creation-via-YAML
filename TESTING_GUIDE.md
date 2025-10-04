@@ -161,7 +161,157 @@ git commit -m "deploy configs/nonexistent.yaml"
 - [ ] Slack notifications work
 - [ ] Error handling and notifications work
 
-## 🚨 Expected Issues & Solutions
+## 🚨 Real Issues Encountered & Solutions
+
+### Configuration Errors (Fixed During Testing)
+
+#### 1. **Secret Manager Replication Format Error**
+**Error**: `Invalid value for input variable: object required, but have string`
+```yaml
+# ❌ WRONG
+replication: "automatic"
+replication: "user_managed"
+
+# ✅ CORRECT
+replication:
+  auto: true
+replication:
+  user_managed:
+    - location: "us-central1"
+    - location: "us-west1"
+```
+
+#### 2. **Secret Manager Additional Versions Format Error**
+**Error**: `element 0: string required, but have object`
+```yaml
+# ❌ WRONG
+additional_versions:
+  - value: "old-secret"
+    enabled: false
+
+# ✅ CORRECT
+additional_versions:
+  - "old-secret"
+```
+
+#### 3. **Cloud SQL Encryption Key Name Error**
+**Error**: `Unsupported block type: encryption_key_name`
+**Fix**: Changed from dynamic block to direct attribute in `modules/cloud_sql/main.tf`
+```hcl
+# ❌ WRONG
+dynamic "encryption_key_name" {
+  for_each = var.kms_key_name == null ? [] : [1]
+  content  = var.kms_key_name
+}
+
+# ✅ CORRECT
+encryption_key_name = var.kms_key_name
+```
+
+#### 4. **Project ID Shell Command Error**
+**Error**: `$(date +%s)` not expanded in YAML
+```yaml
+# ❌ WRONG
+project_id: "comprehensive-test-$(date +%s)"
+
+# ✅ CORRECT
+project_id: "comprehensive-test-20250103"
+```
+
+#### 5. **Cloud Router BGP Configuration Error**
+**Error**: `advertised_ip_ranges cannot be specified when using advertise_mode DEFAULT`
+**Fix**: Removed `bgp_advertised_ip_ranges` from Cloud Router configuration
+```yaml
+# ❌ WRONG
+cloud_router:
+  name: "test-router"
+  asn: 65001
+  bgp_advertised_ip_ranges:
+    - range: "10.10.0.0/24"
+
+# ✅ CORRECT
+cloud_router:
+  name: "test-router"
+  asn: 65001
+```
+
+#### 6. **Network Reference Format Errors**
+**Error**: `doesn't match regexp` for private_network and authorized_network
+**Fix**: Use full self-links instead of names
+```yaml
+# ❌ WRONG
+private_network: "test-vpc"
+authorized_network: "test-vpc"
+
+# ✅ CORRECT
+private_network: "projects/comprehensive-test-20250103/global/networks/test-vpc"
+authorized_network: "projects/comprehensive-test-20250103/global/networks/test-vpc"
+```
+
+#### 7. **Firewall Rules Configuration Conflict**
+**Error**: `target_tags conflicts with target_service_accounts`
+**Fix**: Modified firewall module to handle both conditions
+```hcl
+# In modules/firewall/main.tf
+target_tags             = length(var.target_tags) > 0 ? var.target_tags : null
+target_service_accounts = length(var.target_service_accounts) > 0 ? var.target_service_accounts : null
+```
+
+#### 8. **Firewall Rules Field Names Error**
+**Error**: Wrong field names in YAML configuration
+```yaml
+# ❌ WRONG
+ranges: ["0.0.0.0/0"]
+allow:
+  - protocol: "tcp"
+
+# ✅ CORRECT
+source_ranges: ["0.0.0.0/0"]
+allows:
+  - protocol: "tcp"
+```
+
+#### 9. **Secret Manager Replication Logic Error**
+**Error**: `argument must not be null` in replication logic
+**Fix**: Fixed null handling in `modules/secret_manager/main.tf`
+```hcl
+# ❌ WRONG
+for_each = var.replication == null || try(var.replication.auto, true) ? [1] : []
+
+# ✅ CORRECT
+for_each = var.replication == null || try(var.replication.auto, false) == true ? [1] : []
+```
+
+#### 10. **Subnet Secondary IP Ranges Error**
+**Error**: `each.value cannot be used in this context`
+**Fix**: Changed `each.value` to `secondary_ip_range.value` in subnet module
+```hcl
+# ❌ WRONG
+range_name    = each.value.range_name
+ip_cidr_range = each.value.ip_cidr_range
+
+# ✅ CORRECT
+range_name    = secondary_ip_range.value.range_name
+ip_cidr_range = secondary_ip_range.value.ip_cidr_range
+```
+
+#### 11. **Secret Manager Customer Managed Encryption Error**
+**Error**: `Missing required argument: kms_key_name`
+**Fix**: Made customer_managed_encryption conditional
+```hcl
+# ❌ WRONG
+customer_managed_encryption {
+  kms_key_name = try(replicas.value.kms_key_name, null)
+}
+
+# ✅ CORRECT
+dynamic "customer_managed_encryption" {
+  for_each = try(replicas.value.kms_key_name, null) != null ? [1] : []
+  content {
+    kms_key_name = replicas.value.kms_key_name
+  }
+}
+```
 
 ### Common Issues
 1. **API Quotas**: Some APIs have daily quotas
@@ -195,6 +345,27 @@ gcloud logging read "resource.type=gce_instance" --project=comprehensive-test-*
 gcloud billing accounts list
 gcloud billing projects list --billing-account=01783B-A7A65B-153181
 ```
+
+## 🎓 Lessons Learned
+
+### Key Takeaways from Real Testing
+
+1. **YAML Configuration Validation**: Always validate YAML syntax and field names against module variables
+2. **Terraform Module Dependencies**: Understand how modules reference each other (network names vs self-links)
+3. **GCP Resource Requirements**: Some resources require specific formats (full self-links, not just names)
+4. **Dynamic Block Logic**: Be careful with `for_each` and `each.value` usage in Terraform
+5. **Null Handling**: Properly handle null values in conditional logic
+6. **Resource Conflicts**: Some GCP resources have mutually exclusive attributes
+7. **Shell Command Limitations**: YAML doesn't expand shell commands like `$(date +%s)`
+
+### Best Practices Discovered
+
+1. **Use Full Self-Links**: Always use complete GCP resource self-links for references
+2. **Validate Module Variables**: Check `variables.tf` files to understand expected input formats
+3. **Test Incrementally**: Start with minimal configurations and add complexity gradually
+4. **Handle Edge Cases**: Consider null values, empty lists, and optional parameters
+5. **Document Fixes**: Keep track of configuration errors and their solutions
+6. **Use Conditional Logic**: Make optional attributes truly optional with proper null handling
 
 ## 📊 Test Results Tracking
 
