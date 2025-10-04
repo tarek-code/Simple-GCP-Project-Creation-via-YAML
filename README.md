@@ -184,6 +184,33 @@ Notes:
 - When no specific file is provided, the workflow targets YAMLs changed in the pushed commit range.
 - Any other message results in a quick no-op run.
 
+#### Destroy Script Prompts (m/p/exit)
+
+The destroy script (`scripts/destroy.py`) presents interactive prompts that require specific responses:
+
+- **`m`** - Module-level destruction: Destroys only the infrastructure resources (VMs, storage, etc.) but keeps the GCP project
+- **`p`** - Project-level destruction: Destroys the entire GCP project including all resources
+- **`exit`** - Cancels the destruction process
+
+**GitHub Actions Auto-Selection:**
+The workflow automatically handles these prompts based on your commit message:
+
+```bash
+# Module-level destruction (auto-selects 'm')
+git commit -m "destroy configs/prod.yaml yes"
+
+# Project-level destruction (auto-selects 'p') 
+git commit -m "destroy configs/prod.yaml yes project cleanup"
+
+# Plan-only (sends 'no' to all prompts)
+git commit -m "destroy configs/prod.yaml"
+```
+
+**How it works:**
+- If commit message contains "project" → auto-selects `p` (project-level)
+- Otherwise → auto-selects `m` (module-level)
+- Plan-only mode → sends `no` to all prompts (no actual destruction)
+
 #### 2. Manual Deployment/Destruction
 1. Go to GitHub Actions tab
 2. Select "Infrastructure Deploy" workflow
