@@ -216,6 +216,17 @@ jobs:
             echo "No .tf-runs directory to add"
           fi
 
+          # Check for deleted directories and add them to git
+          if [ -d ".tf-runs" ]; then
+            # Find directories that were removed (exist in git but not in filesystem)
+            for dir in $(git ls-tree -r --name-only HEAD .tf-runs/ | cut -d'/' -f1-2 | sort -u); do
+              if [ ! -d "$dir" ]; then
+                echo "Directory $dir was removed, adding to git"
+                git rm -r "$dir" 2>/dev/null || true
+              fi
+            done
+          fi
+
           # Check if there are any changes to commit
           if git diff --staged --quiet; then
             echo "No changes to commit"
