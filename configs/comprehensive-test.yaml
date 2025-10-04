@@ -49,9 +49,9 @@ resources:
     name: "test-vpc"
     routing_mode: "GLOBAL"
     description: "Comprehensive test VPC"
- 
+
   subnets:
-    - name: "test-subnet-11"
+    - name: "test-subnet-111"
       region: "us-central1"
       ip_cidr_range: "10.10.0.0/24"
       network: "test-vpc"
