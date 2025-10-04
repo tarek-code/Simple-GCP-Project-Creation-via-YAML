@@ -1,0 +1,42 @@
+# Test Configuration for Destroy Scenarios
+# This is a minimal config to test all destroy patterns
+
+project_id: "test-destroy-$(date +%s)"
+billing_account: "01783B-A7A65B-153181"
+
+labels:
+  purpose: "destroy-testing"
+  environment: "test"
+
+apis:
+  - compute.googleapis.com
+  - storage.googleapis.com
+  - iam.googleapis.com
+
+resources:
+  # Minimal resources for destroy testing
+  vpc:
+    name: "test-destroy-vpc"
+    routing_mode: "GLOBAL"
+
+  subnets:
+    - name: "test-destroy-subnet"
+      region: "us-central1"
+      ip_cidr_range: "10.20.0.0/24"
+      network: "test-destroy-vpc"
+
+  compute_instances:
+    - name: "test-destroy-vm"
+      zone: "us-central1-a"
+      machine_type: "e2-micro"
+      image: "debian-cloud/debian-11"
+      subnetwork: "test-destroy-subnet"
+
+  storage_buckets:
+    - name: "test-destroy-bucket"
+      location: "US"
+      force_destroy: true
+
+  service_accounts:
+    - account_id: "test-destroy-sa"
+      display_name: "Test Destroy Service Account"
