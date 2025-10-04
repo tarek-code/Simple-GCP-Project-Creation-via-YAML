@@ -313,6 +313,31 @@ dynamic "customer_managed_encryption" {
 }
 ```
 
+#### 12. **GitHub Actions Folder Deletion Not Committed**
+**Error**: Project folders deleted locally but not removed from git repository
+**Problem**: Workflow removed folders after committing, so deletions weren't tracked
+**Fix**: Added logic to detect and commit deleted directories
+```bash
+# Added to .github/workflows/infrastructure-deploy.yml
+# Check for deleted directories and add them to git
+if [ -d ".tf-runs" ]; then
+  # Find directories that were removed (exist in git but not in filesystem)
+  for dir in $(git ls-tree -r --name-only HEAD .tf-runs/ | cut -d'/' -f1-2 | sort -u); do
+    if [ ! -d "$dir" ]; then
+      echo "Directory $dir was removed, adding to git"
+      git rm -r "$dir" 2>/dev/null || true
+    fi
+  done
+fi
+```
+
+**Symptoms**:
+- Workflow shows: `[INFO] Removed run directory: .tf-runs/project-name`
+- Git commit shows: `No changes to commit`
+- Folder still exists in repository
+
+**Solution**: Workflow now automatically detects and commits folder deletions
+
 ### Common Issues
 1. **API Quotas**: Some APIs have daily quotas
    - **Solution**: Use different regions/zones
@@ -357,6 +382,8 @@ gcloud billing projects list --billing-account=01783B-A7A65B-153181
 5. **Null Handling**: Properly handle null values in conditional logic
 6. **Resource Conflicts**: Some GCP resources have mutually exclusive attributes
 7. **Shell Command Limitations**: YAML doesn't expand shell commands like `$(date +%s)`
+8. **GitHub Actions Workflow Issues**: Regex patterns must allow extra words, folder deletions need special handling
+9. **Git State Management**: Deleted folders must be explicitly removed from git tracking
 
 ### Best Practices Discovered
 
@@ -366,6 +393,9 @@ gcloud billing projects list --billing-account=01783B-A7A65B-153181
 4. **Handle Edge Cases**: Consider null values, empty lists, and optional parameters
 5. **Document Fixes**: Keep track of configuration errors and their solutions
 6. **Use Conditional Logic**: Make optional attributes truly optional with proper null handling
+7. **GitHub Actions Regex Patterns**: Use `.*` to allow extra words after required patterns
+8. **Folder Deletion Tracking**: Implement logic to detect and commit deleted directories
+9. **Workflow Testing**: Test both deploy and destroy scenarios thoroughly
 
 ## 📊 Test Results Tracking
 
