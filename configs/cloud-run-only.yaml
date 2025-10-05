@@ -1,4 +1,5 @@
 project_id: dev-intern-poc
+billing_account: "01783B-A7A65B-153181"
 labels:
   environment: dev
   owner: intern
