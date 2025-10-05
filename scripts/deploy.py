@@ -126,11 +126,21 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
             ])
         )
 
-    # VPC
-    if vpc := resources.get("vpc"):
+    # VPC (support single object or list under 'vpc' or 'vpcs')
+    vpc_items: List[dict] = []
+    if "vpc" in resources:
+        if isinstance(resources["vpc"], list):
+            vpc_items.extend([v for v in resources["vpc"] if isinstance(v, dict)])
+        elif isinstance(resources["vpc"], dict):
+            vpc_items.append(resources["vpc"]) 
+    if isinstance(resources.get("vpcs"), list):
+        vpc_items.extend([v for v in resources["vpcs"] if isinstance(v, dict)])
+
+    for i, vpc in enumerate(vpc_items, start=1):
+        module_name = "vpc" if i == 1 else f"vpc_{i}"
         blocks.append(
             "\n".join([
-                f"module \"vpc\" {{",
+                f"module \"{module_name}\" {{",
                 f"  source  = \"{mod_source('vpc')}\"",
                 f"  project_id   = var.project_id",
                 f"  name         = \"{vpc['name']}\"",

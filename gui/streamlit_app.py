@@ -70,19 +70,62 @@ def project_builder():
         # Initialize labels in session state
         if 'project_labels' not in st.session_state:
             st.session_state.project_labels = {}
+        # Initialize temp inputs used for adding labels (must be before widgets render)
+        if 'new_label_key' not in st.session_state:
+            st.session_state.new_label_key = ""
+        if 'new_label_value' not in st.session_state:
+            st.session_state.new_label_value = ""
         
-        # Display existing labels
+        # Callback to add a label and clear inputs
+        def _on_add_label():
+            key = (st.session_state.get('new_label_key') or '').strip()
+            val = (st.session_state.get('new_label_value') or '').strip()
+            if key and val:
+                st.session_state.project_labels[key] = val
+                # Clear inputs for next entry
+                st.session_state.new_label_key = ""
+                st.session_state.new_label_value = ""
+        
+        # Display existing labels with inline editing (key and value)
         if st.session_state.project_labels:
             st.markdown("**Current Labels:**")
-            for key, value in st.session_state.project_labels.items():
-                col_key, col_value, col_del = st.columns([2, 2, 1])
+            # Use stable ordering and stable widget keys based on the label key
+            for orig_key in sorted(list(st.session_state.project_labels.keys())):
+                orig_val = st.session_state.project_labels[orig_key]
+                col_key, col_value, col_actions = st.columns([2, 2, 1])
                 with col_key:
-                    st.text(f"Key: {key}")
+                    new_key = st.text_input(
+                        "Key",
+                        value=orig_key,
+                        key=f"lbl_key_{orig_key}"
+                    )
                 with col_value:
-                    st.text(f"Value: {value}")
-                with col_del:
-                    if st.button("🗑️", key=f"del_{key}"):
-                        del st.session_state.project_labels[key]
+                    new_val = st.text_input(
+                        "Value",
+                        value=orig_val,
+                        key=f"lbl_val_{orig_key}"
+                    )
+                # Persist edits safely
+                changed = False
+                # Handle key changes
+                if new_key != orig_key and new_key:
+                    # Avoid overwriting an existing different key
+                    if new_key not in st.session_state.project_labels:
+                        st.session_state.project_labels[new_key] = st.session_state.project_labels.pop(orig_key)
+                        orig_key = new_key
+                        changed = True
+                # Handle value changes
+                if new_val != orig_val:
+                    st.session_state.project_labels[orig_key] = new_val
+                    changed = True
+                if changed:
+                    st.experimental_rerun()
+                with col_actions:
+                    if st.button("🗑️", key=f"del_label_{orig_key}"):
+                        # Use current key (which may have been renamed this render)
+                        key_to_delete = new_key or orig_key
+                        if key_to_delete in st.session_state.project_labels:
+                            del st.session_state.project_labels[key_to_delete]
                         st.rerun()
         
         # Add new label
@@ -90,16 +133,11 @@ def project_builder():
         col_key, col_value, col_add = st.columns([2, 2, 1])
         
         with col_key:
-            new_label_key = st.text_input("Label Key", placeholder="environment", key="new_label_key")
+            st.text_input("Label Key", placeholder="environment", key="new_label_key")
         with col_value:
-            new_label_value = st.text_input("Label Value", placeholder="production", key="new_label_value")
+            st.text_input("Label Value", placeholder="production", key="new_label_value")
         with col_add:
-            if st.button("➕ Add", key="add_label"):
-                if new_label_key and new_label_value:
-                    st.session_state.project_labels[new_label_key] = new_label_value
-                    st.rerun()
-                else:
-                    st.warning("Please enter both key and value")
+            st.button("➕ Add", key="add_label", on_click=_on_add_label)
         
         # Clear all labels button
         if st.session_state.project_labels:
@@ -163,20 +201,53 @@ def project_builder():
     if 'project_resources' not in st.session_state:
         st.session_state.project_resources = {}
     
-    # VPC Configuration
-    if st.checkbox("🌐 Create VPC Network"):
+    # VPC Configuration (multiple)
+    if st.checkbox("🌐 Create VPC Networks"):
         st.markdown("**VPC Settings**")
-        col1, col2 = st.columns(2)
-        with col1:
-            vpc_name = st.text_input("VPC Name", value="my-vpc", key="vpc_name")
-        with col2:
-            routing_mode = st.selectbox("Routing Mode", ["GLOBAL", "REGIONAL"], key="routing_mode")
+        if 'vpcs' not in st.session_state:
+            st.session_state.vpcs = []
         
-        resources["vpc"] = {
-            "name": vpc_name,
-            "routing_mode": routing_mode,
-            "description": "VPC created via GUI"
-        }
+        # Existing VPCs with inline editing
+        if st.session_state.vpcs:
+            st.markdown("**Current VPCs:**")
+            for i, v in enumerate(list(st.session_state.vpcs)):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                with col1:
+                    new_name = st.text_input("Name", value=v['name'], key=f"vpc_name_{i}")
+                with col2:
+                    new_routing = st.selectbox("Routing", ["GLOBAL", "REGIONAL"], 
+                                             index=0 if v.get('routing_mode', 'GLOBAL') == 'GLOBAL' else 1,
+                                             key=f"vpc_routing_{i}")
+                with col3:
+                    if st.button("🗑️", key=f"del_vpc_{i}"):
+                        st.session_state.vpcs.pop(i)
+                        st.rerun()
+                
+                # Update if changed
+                if new_name != v['name'] or new_routing != v.get('routing_mode', 'GLOBAL'):
+                    st.session_state.vpcs[i]['name'] = new_name
+                    st.session_state.vpcs[i]['routing_mode'] = new_routing
+        
+        # Add VPC
+        st.markdown("**Add New VPC:**")
+        col1, col2, col3 = st.columns([2, 2, 1])
+        with col1:
+            new_vpc_name = st.text_input("VPC Name", value="my-vpc", key="new_vpc_name")
+        with col2:
+            new_vpc_routing = st.selectbox("Routing Mode", ["GLOBAL", "REGIONAL"], key="new_vpc_routing")
+        with col3:
+            if st.button("➕ Add", key="add_vpc"):
+                if new_vpc_name:
+                    st.session_state.vpcs.append({
+                        "name": new_vpc_name,
+                        "routing_mode": new_vpc_routing,
+                        "description": "VPC created via GUI"
+                    })
+                    st.rerun()
+        
+        if st.session_state.vpcs:
+            # Prefer list under 'vpcs' to support multiple
+            resources["vpcs"] = st.session_state.vpcs
     
     # Subnets
     if st.checkbox("📡 Create Subnets"):
@@ -184,43 +255,68 @@ def project_builder():
         if 'subnets' not in st.session_state:
             st.session_state.subnets = []
         
-        # Display existing subnets
+        # Display existing subnets with inline editing
         if st.session_state.subnets:
             st.markdown("**Current Subnets:**")
-            for i, subnet in enumerate(st.session_state.subnets):
+            for i, subnet in enumerate(list(st.session_state.subnets)):
                 col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
                 with col1:
-                    st.text(f"Name: {subnet['name']}")
+                    new_name = st.text_input("Name", value=subnet['name'], key=f"subnet_name_{i}")
                 with col2:
-                    st.text(f"Region: {subnet['region']}")
+                    new_region = st.selectbox("Region", ["us-central1", "us-west1", "europe-west1"], 
+                                            index=["us-central1", "us-west1", "europe-west1"].index(subnet['region']),
+                                            key=f"subnet_region_{i}")
                 with col3:
-                    st.text(f"CIDR: {subnet['ip_cidr_range']}")
+                    new_cidr = st.text_input("CIDR", value=subnet['ip_cidr_range'], key=f"subnet_cidr_{i}")
                 with col4:
                     if st.button("🗑️", key=f"del_subnet_{i}"):
                         st.session_state.subnets.pop(i)
                         st.rerun()
+                
+                # Update if changed
+                if (new_name != subnet['name'] or new_region != subnet['region'] or 
+                    new_cidr != subnet['ip_cidr_range']):
+                    st.session_state.subnets[i]['name'] = new_name
+                    st.session_state.subnets[i]['region'] = new_region
+                    st.session_state.subnets[i]['ip_cidr_range'] = new_cidr
         
         # Add new subnet
         st.markdown("**Add New Subnet:**")
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+        col1, col2, col3 = st.columns([2, 2, 2])
         with col1:
             subnet_name = st.text_input("Subnet Name", value="subnet-1", key="new_subnet_name")
         with col2:
             subnet_region = st.selectbox("Region", ["us-central1", "us-west1", "europe-west1"], key="new_subnet_region")
         with col3:
             subnet_cidr = st.text_input("CIDR Range", value="10.0.0.0/24", key="new_subnet_cidr")
-        with col4:
-            if st.button("➕ Add", key="add_subnet"):
-                if subnet_name and subnet_cidr:
-                    new_subnet = {
-                        "name": subnet_name,
-                        "region": subnet_region,
-                        "ip_cidr_range": subnet_cidr,
-                        "network": "my-vpc",  # Default to main VPC
-                        "private_ip_google_access": True
-                    }
-                    st.session_state.subnets.append(new_subnet)
-                    st.rerun()
+
+        # Network selection (which VPC?)
+        # If a VPC was defined above in this form, offer it; otherwise allow manual entry
+        vpc_options = []
+        # Collect VPCs defined in this form run
+        if resources.get("vpc") and resources["vpc"].get("name"):
+            vpc_options.append(resources["vpc"]["name"])
+        if "vpcs" in resources:
+            for v in resources["vpcs"]:
+                if isinstance(v, dict) and v.get("name"):
+                    vpc_options.append(v["name"])
+        st.markdown("**Attach to VPC**")
+        if vpc_options:
+            subnet_network = st.selectbox("VPC Network", vpc_options, key="new_subnet_network_select")
+        else:
+            subnet_network = st.text_input("VPC Network Name", value="", placeholder="enter existing VPC name", key="new_subnet_network_text")
+
+        if st.button("➕ Add", key="add_subnet"):
+            if subnet_name and subnet_cidr and (subnet_network or (vpc_options and subnet_network)):
+                new_subnet = {
+                    "name": subnet_name,
+                    "region": subnet_region,
+                    "ip_cidr_range": subnet_cidr,
+                    "network": subnet_network,
+                    "private_ip_google_access": True
+                }
+                st.session_state.subnets.append(new_subnet)
+                st.rerun()
         
         if st.session_state.subnets:
             resources["subnets"] = st.session_state.subnets
@@ -231,21 +327,32 @@ def project_builder():
         if 'firewall_rules' not in st.session_state:
             st.session_state.firewall_rules = []
         
-        # Display existing rules
+        # Display existing rules with inline editing
         if st.session_state.firewall_rules:
             st.markdown("**Current Firewall Rules:**")
-            for i, rule in enumerate(st.session_state.firewall_rules):
+            for i, rule in enumerate(list(st.session_state.firewall_rules)):
                 col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
                 with col1:
-                    st.text(f"Name: {rule['name']}")
+                    new_name = st.text_input("Name", value=rule['name'], key=f"fw_name_{i}")
                 with col2:
-                    st.text(f"Direction: {rule['direction']}")
+                    new_direction = st.selectbox("Direction", ["INGRESS", "EGRESS"], 
+                                               index=0 if rule['direction'] == 'INGRESS' else 1,
+                                               key=f"fw_direction_{i}")
                 with col3:
-                    st.text(f"Protocol: {rule['protocol']}")
+                    new_protocol = st.selectbox("Protocol", ["tcp", "udp", "icmp", "all"], 
+                                              index=["tcp", "udp", "icmp", "all"].index(rule['protocol']),
+                                              key=f"fw_protocol_{i}")
                 with col4:
                     if st.button("🗑️", key=f"del_firewall_{i}"):
                         st.session_state.firewall_rules.pop(i)
                         st.rerun()
+                
+                # Update if changed
+                if (new_name != rule['name'] or new_direction != rule['direction'] or 
+                    new_protocol != rule['protocol']):
+                    st.session_state.firewall_rules[i]['name'] = new_name
+                    st.session_state.firewall_rules[i]['direction'] = new_direction
+                    st.session_state.firewall_rules[i]['protocol'] = new_protocol
         
         # Add new rule
         st.markdown("**Add New Firewall Rule:**")
@@ -279,19 +386,24 @@ def project_builder():
         if 'service_accounts' not in st.session_state:
             st.session_state.service_accounts = []
         
-        # Display existing service accounts
+        # Display existing service accounts with inline editing
         if st.session_state.service_accounts:
             st.markdown("**Current Service Accounts:**")
-            for i, sa in enumerate(st.session_state.service_accounts):
+            for i, sa in enumerate(list(st.session_state.service_accounts)):
                 col1, col2, col3 = st.columns([3, 2, 1])
                 with col1:
-                    st.text(f"ID: {sa['account_id']}")
+                    new_id = st.text_input("Account ID", value=sa['account_id'], key=f"sa_id_{i}")
                 with col2:
-                    st.text(f"Name: {sa.get('display_name', 'N/A')}")
+                    new_display = st.text_input("Display Name", value=sa.get('display_name', ''), key=f"sa_display_{i}")
                 with col3:
                     if st.button("🗑️", key=f"del_sa_{i}"):
                         st.session_state.service_accounts.pop(i)
                         st.rerun()
+                
+                # Update if changed
+                if new_id != sa['account_id'] or new_display != sa.get('display_name', ''):
+                    st.session_state.service_accounts[i]['account_id'] = new_id
+                    st.session_state.service_accounts[i]['display_name'] = new_display
         
         # Add new service account
         st.markdown("**Add New Service Account:**")
@@ -320,19 +432,34 @@ def project_builder():
         if 'iam_bindings' not in st.session_state:
             st.session_state.iam_bindings = []
         
-        # Display existing bindings
+        # Display existing bindings with inline editing
         if st.session_state.iam_bindings:
             st.markdown("**Current IAM Bindings:**")
-            for i, binding in enumerate(st.session_state.iam_bindings):
+            for i, binding in enumerate(list(st.session_state.iam_bindings)):
                 col1, col2, col3 = st.columns([2, 2, 1])
                 with col1:
-                    st.text(f"Role: {binding['role']}")
+                    new_role = st.selectbox("Role", [
+                        "roles/storage.admin",
+                        "roles/compute.admin", 
+                        "roles/editor",
+                        "roles/viewer"
+                    ], index=[
+                        "roles/storage.admin",
+                        "roles/compute.admin", 
+                        "roles/editor",
+                        "roles/viewer"
+                    ].index(binding['role']), key=f"iam_role_{i}")
                 with col2:
-                    st.text(f"Member: {binding['member']}")
+                    new_member = st.text_input("Member", value=binding['member'], key=f"iam_member_{i}")
                 with col3:
                     if st.button("🗑️", key=f"del_iam_{i}"):
                         st.session_state.iam_bindings.pop(i)
                         st.rerun()
+                
+                # Update if changed
+                if new_role != binding['role'] or new_member != binding['member']:
+                    st.session_state.iam_bindings[i]['role'] = new_role
+                    st.session_state.iam_bindings[i]['member'] = new_member
         
         # Add new binding
         st.markdown("**Add New IAM Binding:**")
@@ -365,21 +492,32 @@ def project_builder():
         if 'compute_instances' not in st.session_state:
             st.session_state.compute_instances = []
         
-        # Display existing instances
+        # Display existing instances with inline editing
         if st.session_state.compute_instances:
             st.markdown("**Current Compute Instances:**")
-            for i, vm in enumerate(st.session_state.compute_instances):
+            for i, vm in enumerate(list(st.session_state.compute_instances)):
                 col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
                 with col1:
-                    st.text(f"Name: {vm['name']}")
+                    new_name = st.text_input("Name", value=vm['name'], key=f"vm_name_{i}")
                 with col2:
-                    st.text(f"Zone: {vm['zone']}")
+                    new_zone = st.selectbox("Zone", ["us-central1-a", "us-west1-a", "europe-west1-a"], 
+                                          index=["us-central1-a", "us-west1-a", "europe-west1-a"].index(vm['zone']),
+                                          key=f"vm_zone_{i}")
                 with col3:
-                    st.text(f"Type: {vm['machine_type']}")
+                    new_type = st.selectbox("Type", ["e2-micro", "e2-small", "e2-medium"], 
+                                          index=["e2-micro", "e2-small", "e2-medium"].index(vm['machine_type']),
+                                          key=f"vm_type_{i}")
                 with col4:
                     if st.button("🗑️", key=f"del_vm_{i}"):
                         st.session_state.compute_instances.pop(i)
                         st.rerun()
+                
+                # Update if changed
+                if (new_name != vm['name'] or new_zone != vm['zone'] or 
+                    new_type != vm['machine_type']):
+                    st.session_state.compute_instances[i]['name'] = new_name
+                    st.session_state.compute_instances[i]['zone'] = new_zone
+                    st.session_state.compute_instances[i]['machine_type'] = new_type
         
         # Add new instance
         st.markdown("**Add New Compute Instance:**")
@@ -412,19 +550,26 @@ def project_builder():
         if 'storage_buckets' not in st.session_state:
             st.session_state.storage_buckets = []
         
-        # Display existing buckets
+        # Display existing buckets with inline editing
         if st.session_state.storage_buckets:
             st.markdown("**Current Storage Buckets:**")
-            for i, bucket in enumerate(st.session_state.storage_buckets):
+            for i, bucket in enumerate(list(st.session_state.storage_buckets)):
                 col1, col2, col3 = st.columns([2, 2, 1])
                 with col1:
-                    st.text(f"Name: {bucket['name']}")
+                    new_name = st.text_input("Name", value=bucket['name'], key=f"bucket_name_{i}")
                 with col2:
-                    st.text(f"Location: {bucket['location']}")
+                    new_location = st.selectbox("Location", ["US", "EU", "ASIA"], 
+                                              index=["US", "EU", "ASIA"].index(bucket['location']),
+                                              key=f"bucket_location_{i}")
                 with col3:
                     if st.button("🗑️", key=f"del_bucket_{i}"):
                         st.session_state.storage_buckets.pop(i)
                         st.rerun()
+                
+                # Update if changed
+                if new_name != bucket['name'] or new_location != bucket['location']:
+                    st.session_state.storage_buckets[i]['name'] = new_name
+                    st.session_state.storage_buckets[i]['location'] = new_location
         
         # Add new bucket
         st.markdown("**Add New Storage Bucket:**")
