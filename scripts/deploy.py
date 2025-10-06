@@ -574,7 +574,14 @@ def run_terraform_in_dir(run_dir: str, tfvars_path: str, project_id: str, has_pr
         ], check=True)
 
         # Ask whether to apply for this project
-        answer = input(f"Apply changes for project '{project_id}'? (yes/no): ")
+        # Skip prompt if SKIP_APPLY_PROMPT environment variable is set
+        if os.environ.get("SKIP_APPLY_PROMPT"):
+            auto_answer = os.environ.get("AUTO_APPROVE_ANSWER", "no")
+            print(f"[INFO] Skipping apply prompt (SKIP_APPLY_PROMPT=true); auto-answering '{auto_answer}'.")
+            answer = auto_answer
+        else:
+            answer = input(f"Apply changes for project '{project_id}'? (yes/no): ")
+        
         if answer.strip().lower() in ("yes", "y"):
             print("[INFO] Proceeding to apply...")
             # Phase 1 apply: project and APIs (only if module present)

@@ -7,8 +7,26 @@ import sys
 from pathlib import Path
 
 # Add the project root to Python path
-project_root = Path(__file__).parent.parent
+# Try different path resolution methods
+current_dir = Path.cwd()
+script_dir = Path(__file__).parent
+
+# If we're in the gui directory, go up one level
+if current_dir.name == 'gui':
+    project_root = current_dir.parent
+elif script_dir.name == 'gui':
+    project_root = script_dir.parent
+else:
+    # Fallback: assume we're already in project root
+    project_root = current_dir
+
 sys.path.append(str(project_root))
+
+# Debug: Print the project root path
+print(f"Current working directory: {current_dir}")
+print(f"Script directory: {script_dir}")
+print(f"Project root: {project_root}")
+print(f"Configs directory exists: {(project_root / 'configs').exists()}")
 
 st.set_page_config(
     page_title="GCP Project Creator",
@@ -70,80 +88,58 @@ def project_builder():
         # Initialize labels in session state
         if 'project_labels' not in st.session_state:
             st.session_state.project_labels = {}
-        # Initialize temp inputs used for adding labels (must be before widgets render)
-        if 'new_label_key' not in st.session_state:
-            st.session_state.new_label_key = ""
-        if 'new_label_value' not in st.session_state:
-            st.session_state.new_label_value = ""
         
-        # Callback to add a label and clear inputs
-        def _on_add_label():
-            key = (st.session_state.get('new_label_key') or '').strip()
-            val = (st.session_state.get('new_label_value') or '').strip()
-            if key and val:
-                st.session_state.project_labels[key] = val
-                # Clear inputs for next entry
-                st.session_state.new_label_key = ""
-                st.session_state.new_label_value = ""
+        # Initialize number of label form sections
+        if 'label_form_count' not in st.session_state:
+            st.session_state.label_form_count = 1
         
-        # Display existing labels with inline editing (key and value)
-        if st.session_state.project_labels:
-            st.markdown("**Current Labels:**")
-            # Use stable ordering and stable widget keys based on the label key
-            for orig_key in sorted(list(st.session_state.project_labels.keys())):
-                orig_val = st.session_state.project_labels[orig_key]
-                col_key, col_value, col_actions = st.columns([2, 2, 1])
-                with col_key:
-                    new_key = st.text_input(
-                        "Key",
-                        value=orig_key,
-                        key=f"lbl_key_{orig_key}"
-                    )
-                with col_value:
-                    new_val = st.text_input(
-                        "Value",
-                        value=orig_val,
-                        key=f"lbl_val_{orig_key}"
-                    )
-                # Persist edits safely
-                changed = False
-                # Handle key changes
-                if new_key != orig_key and new_key:
-                    # Avoid overwriting an existing different key
-                    if new_key not in st.session_state.project_labels:
-                        st.session_state.project_labels[new_key] = st.session_state.project_labels.pop(orig_key)
-                        orig_key = new_key
-                        changed = True
-                # Handle value changes
-                if new_val != orig_val:
-                    st.session_state.project_labels[orig_key] = new_val
-                    changed = True
-                if changed:
-                    st.experimental_rerun()
-                with col_actions:
-                    if st.button("🗑️", key=f"del_label_{orig_key}"):
-                        # Use current key (which may have been renamed this render)
-                        key_to_delete = new_key or orig_key
-                        if key_to_delete in st.session_state.project_labels:
-                            del st.session_state.project_labels[key_to_delete]
-                        st.rerun()
+        # Render label form sections
+        for i in range(st.session_state.label_form_count):
+            if i > 0:  # Add space between forms
+                st.markdown("---")
+            
+            st.markdown(f"**Label {i+1}:**")
+            
+            # Get or create label data for this form
+            label_keys = list(st.session_state.project_labels.keys())
+            if i >= len(label_keys):
+                # Create new label with default values
+                new_key = f"label-{i+1}"
+                new_value = f"value-{i+1}"
+                st.session_state.project_labels[new_key] = new_value
+                label_keys = list(st.session_state.project_labels.keys())
+            
+            current_key = label_keys[i] if i < len(label_keys) else f"label-{i+1}"
+            current_value = st.session_state.project_labels.get(current_key, f"value-{i+1}")
+            
+            # Form fields for this label
+            col1, col2, col3 = st.columns([2, 2, 1])
+            with col1:
+                form_key = st.text_input("Label Key", value=current_key, key=f"label_key_{i}")
+            with col2:
+                form_value = st.text_input("Label Value", value=current_value, key=f"label_value_{i}")
+            with col3:
+                if st.button("🗑️", key=f"del_label_{i}"):
+                    # Remove this label and adjust form count
+                    if current_key in st.session_state.project_labels:
+                        del st.session_state.project_labels[current_key]
+                    st.session_state.label_form_count -= 1
+                    st.rerun()
+            
+            # Update label data
+            if form_key and form_key != current_key:
+                # Key changed - update the label
+                if current_key in st.session_state.project_labels:
+                    del st.session_state.project_labels[current_key]
+                st.session_state.project_labels[form_key] = form_value
+            elif form_key == current_key and form_value != current_value:
+                # Value changed
+                st.session_state.project_labels[current_key] = form_value
         
-        # Add new label
-        st.markdown("**Add New Label:**")
-        col_key, col_value, col_add = st.columns([2, 2, 1])
-        
-        with col_key:
-            st.text_input("Label Key", placeholder="environment", key="new_label_key")
-        with col_value:
-            st.text_input("Label Value", placeholder="production", key="new_label_value")
-        with col_add:
-            st.button("➕ Add", key="add_label", on_click=_on_add_label)
-        
-        # Clear all labels button
-        if st.session_state.project_labels:
-            if st.button("🗑️ Clear All Labels", key="clear_all_labels"):
-                st.session_state.project_labels = {}
-                st.rerun()
+        # Add button to create new label form section
+        if st.button("➕ Add Another Label", key="add_label"):
+            st.session_state.label_form_count += 1
+            st.rerun()
         
         labels = st.session_state.project_labels
     
@@ -635,38 +631,59 @@ def project_builder():
         if 'cloud_run_services' not in st.session_state:
             st.session_state.cloud_run_services = []
         
-        # Display existing services
-        if st.session_state.cloud_run_services:
-            st.markdown("**Current Cloud Run Services:**")
-            for i, service in enumerate(st.session_state.cloud_run_services):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.text(f"Name: {service['name']}")
-                with col2:
-                    st.text(f"Location: {service['location']}")
-                with col3:
-                    if st.button("🗑️", key=f"del_cr_{i}"):
-                        st.session_state.cloud_run_services.pop(i)
-                        st.rerun()
         
-        # Add new service
-        st.markdown("**Add New Cloud Run Service:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            service_name = st.text_input("Service Name", value="my-service", key="new_cr_name")
-        with col2:
-            service_location = st.selectbox("Location", ["us-central1", "us-west1", "europe-west1"], key="new_cr_location")
-        with col3:
-            if st.button("➕ Add", key="add_cr_service"):
-                if service_name:
-                    new_service = {
-                        "name": service_name,
-                        "location": service_location,
-                        "image": "gcr.io/cloudrun/hello",
-                        "allow_unauthenticated": True
-                    }
-                    st.session_state.cloud_run_services.append(new_service)
+        # Initialize number of form sections
+        if 'cr_form_count' not in st.session_state:
+            st.session_state.cr_form_count = 1
+        
+        # Render form sections
+        for i in range(st.session_state.cr_form_count):
+            if i > 0:  # Add space between forms
+                st.markdown("---")
+            
+            st.markdown(f"**Cloud Run Service {i+1}:**")
+            
+            # Get or create service data for this form
+            if i >= len(st.session_state.cloud_run_services):
+                st.session_state.cloud_run_services.append({
+                    "name": f"my-service-{i+1}",
+                    "location": "us-central1",
+                    "image": "nginxinc/nginx-unprivileged:stable-alpine",
+                    "allow_unauthenticated": True
+                })
+            
+            service = st.session_state.cloud_run_services[i]
+            
+            # Form fields for this service
+            col1, col2, col3 = st.columns([2, 2, 1])
+            with col1:
+                form_name = st.text_input("Service Name", value=service['name'], key=f"cr_name_{i}")
+            with col2:
+                form_location = st.selectbox("Location", ["us-central1", "us-west1", "europe-west1"], 
+                                           index=["us-central1", "us-west1", "europe-west1"].index(service['location']),
+                                           key=f"cr_location_{i}")
+            with col3:
+                if st.button("🗑️", key=f"del_cr_{i}"):
+                    # Remove this service and adjust form count
+                    st.session_state.cloud_run_services.pop(i)
+                    st.session_state.cr_form_count -= 1
                     st.rerun()
+            
+            form_image = st.text_input("Container Image", value=service['image'], key=f"cr_image_{i}")
+            form_auth = st.checkbox("Allow Unauthenticated", value=service['allow_unauthenticated'], key=f"cr_auth_{i}")
+            
+            # Update service data
+            st.session_state.cloud_run_services[i] = {
+                "name": form_name,
+                "location": form_location,
+                "image": form_image,
+                "allow_unauthenticated": form_auth
+            }
+        
+        # Add button to create new form section
+        if st.button("➕ Add Another Service", key="add_cr_service"):
+            st.session_state.cr_form_count += 1
+            st.rerun()
         
         if st.session_state.cloud_run_services:
             resources["cloud_run_services"] = st.session_state.cloud_run_services
@@ -1132,17 +1149,20 @@ def project_builder():
             st.error("Please fill in Project ID and Billing Account")
             return
         
-        config = {
-            "project_id": project_id,
-            "billing_account": billing_account,
-            "organization_id": organization_id if organization_id else None,
-            "labels": labels,
-            "apis": selected_apis,
-            "resources": resources
-        }
+        from collections import OrderedDict
+        
+        # Create ordered dictionary with specific order
+        config = OrderedDict()
+        config["project_id"] = project_id
+        config["billing_account"] = billing_account
+        config["labels"] = labels
+        config["apis"] = selected_apis
+        if organization_id:
+            config["organization_id"] = organization_id
+        config["resources"] = resources
         
         # Display the configuration
-        st.code(yaml.dump(config, default_flow_style=False), language="yaml")
+        st.code(yaml.dump(dict(config), default_flow_style=False, sort_keys=False), language="yaml")
         
         # Save to session state
         st.session_state.generated_config = config
@@ -1163,9 +1183,13 @@ def config_manager():
     st.header("📋 Configuration Manager")
     st.markdown("Manage and edit your project configurations")
     
+    # Debug information
+    st.info(f"**Debug Info:** Project root: `{project_root}` | Configs path: `{project_root / 'configs'}`")
+    
     # List existing configs
     configs_dir = project_root / "configs"
     if configs_dir.exists():
+        st.success(f"✅ Found configs directory: `{configs_dir}`")
         config_files = list(configs_dir.glob("*.yaml")) + list(configs_dir.glob("*.yml"))
         
         if config_files:
@@ -1185,7 +1209,11 @@ def config_manager():
         else:
             st.info("No configuration files found. Create one using the Project Builder.")
     else:
-        st.warning("Configs directory not found. Please ensure you're running from the project root.")
+        st.error(f"❌ Configs directory not found at: `{configs_dir}`")
+        st.warning("Please ensure you're running from the project root.")
+        st.info("**Current working directory:** " + str(Path.cwd()))
+        st.info("**Streamlit app location:** " + str(Path(__file__).parent))
+        st.info("**Calculated project root:** " + str(project_root))
     
     # Edit configuration
     if hasattr(st.session_state, 'editing_file'):
@@ -1199,8 +1227,7 @@ def config_manager():
             edited_content = st.text_area(
                 "Configuration Content",
                 value=config_content,
-                height=400,
-                language="yaml"
+                height=400
             )
             
             col1, col2 = st.columns(2)
@@ -1272,53 +1299,119 @@ def deploy_config(config_file, plan_only=False, auto_approve=False):
         status_text.text("Initializing deployment...")
         progress_bar.progress(10)
         
-        cmd = [sys.executable, str(project_root / "scripts" / "deploy.py"), str(config_path)]
+        # First run the deploy script to generate Terraform files
+        deploy_cmd = [sys.executable, str(project_root / "scripts" / "deploy.py"), str(config_path)]
         
+        # Set up environment variables
+        env = os.environ.copy()
+        
+        # Handle interactive prompts based on deployment options
         if plan_only:
-            cmd.append("--plan-only")
-        if auto_approve:
-            cmd.append("--auto-approve")
+            # Skip the apply prompt in the deploy script - always answer "no"
+            env["SKIP_APPLY_PROMPT"] = "true"
+            env["AUTO_APPROVE_ANSWER"] = "no"
+        elif auto_approve:
+            # Skip the apply prompt in the deploy script - always answer "yes"
+            env["SKIP_APPLY_PROMPT"] = "true"
+            env["AUTO_APPROVE_ANSWER"] = "yes"
         
-        status_text.text("Running deployment script...")
-        progress_bar.progress(30)
+        status_text.text("Generating Terraform files...")
+        progress_bar.progress(20)
         
-        # Execute the command
-        result = subprocess.run(
-            cmd,
+        # Show the command being run
+        st.info(f"🔧 Running command: `{' '.join(deploy_cmd)}`")
+        
+        # Only check GCP auth if we're actually deploying (not planning)
+        if not plan_only:
+            # Check if gcloud is available and authenticated
+            try:
+                gcloud_check = subprocess.run(
+                    ["gcloud", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if gcloud_check.returncode == 0:
+                    st.success("✅ gcloud is available")
+                    
+                    # Check authentication
+                    auth_check = subprocess.run(
+                        ["gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if auth_check.returncode == 0 and auth_check.stdout.strip():
+                        st.success(f"✅ Authenticated as: {auth_check.stdout.strip()}")
+                    else:
+                        st.error("❌ Not authenticated with GCP. Run: `gcloud auth login`")
+                else:
+                    st.error("❌ gcloud command not found")
+            except Exception as e:
+                st.error(f"❌ Error checking gcloud: {str(e)}")
+        else:
+            st.info("ℹ️ Plan-only mode: No GCP authentication required")
+        
+        # Use real-time output to avoid hanging
+        # Pass environment variables to ensure gcloud access
+        
+        # Simple approach: just run the deploy script with the environment variables
+        deploy_result = subprocess.run(
+            deploy_cmd,
             cwd=str(project_root),
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=600,  # 10 minute timeout
+            env=env
         )
         
+        # Display deploy script results
         progress_bar.progress(80)
         status_text.text("Processing results...")
         
-        # Display results
-        if result.returncode == 0:
-            st.success("✅ Deployment completed successfully!")
+        # Function to remove ANSI escape codes
+        def strip_ansi(text):
+            import re
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            return ansi_escape.sub('', text)
+        
+        if deploy_result.returncode == 0:
+            st.success("✅ Deploy script completed successfully!")
             progress_bar.progress(100)
             
-            if result.stdout:
-                st.subheader("📋 Deployment Output")
-                st.code(result.stdout)
+            if deploy_result.stdout:
+                st.subheader("📋 Deploy Script Output")
+                clean_output = strip_ansi(deploy_result.stdout)
+                st.code(clean_output)
         else:
-            st.error("❌ Deployment failed!")
+            st.error("❌ Deploy script failed!")
             progress_bar.progress(100)
             
-            if result.stderr:
+            if deploy_result.stderr:
                 st.subheader("🚨 Error Details")
-                st.code(result.stderr)
+                clean_stderr = strip_ansi(deploy_result.stderr)
+                st.code(clean_stderr)
             
-            if result.stdout:
+            if deploy_result.stdout:
                 st.subheader("📋 Output")
-                st.code(result.stdout)
+                clean_output = strip_ansi(deploy_result.stdout)
+                st.code(clean_output)
         
         status_text.text("Deployment completed")
         
     except subprocess.TimeoutExpired:
-        st.error("⏰ Deployment timed out after 5 minutes")
+        st.error("⏰ Deploy script timed out after 10 minutes")
         progress_bar.progress(100)
+        st.warning("💡 The deploy script is hanging. This usually means:")
+        st.markdown("""
+        - **GCP Authentication**: Run `gcloud auth login` first
+        - **Network Issues**: Check your internet connection
+        - **Invalid Config**: Check your YAML file for errors
+        - **Python Dependencies**: Missing required packages
+        """)
+        st.info("🔧 Manual command to test:")
+        st.code(f"python {project_root / 'scripts' / 'deploy.py'} {config_path}")
+        st.info("💡 Try running this command in your terminal to see where it hangs")
     except Exception as e:
         st.error(f"💥 Deployment error: {str(e)}")
         progress_bar.progress(100)
