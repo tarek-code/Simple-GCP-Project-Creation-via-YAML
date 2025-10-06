@@ -45,6 +45,7 @@ def main():
         "🏗️ Project Builder",
         "📋 Configuration Manager", 
         "🚀 Deploy & Monitor",
+        "🗑️ Destroy",
         "📚 Help & Examples"
     ])
     
@@ -54,6 +55,8 @@ def main():
         config_manager()
     elif page == "🚀 Deploy & Monitor":
         deploy_monitor()
+    elif page == "🗑️ Destroy":
+        destroy_manager()
     elif page == "📚 Help & Examples":
         help_examples()
 
@@ -1278,6 +1281,91 @@ def deploy_monitor():
             st.info("No configuration files found. Create one using the Project Builder.")
     else:
         st.warning("Configs directory not found.")
+
+def destroy_manager():
+    st.header("🗑️ Destroy")
+    st.markdown("Destroy deployed resources or entire projects using `scripts/destroy.py`.")
+
+    configs_dir = project_root / "configs"
+    available_configs = []
+    if configs_dir.exists():
+        available_configs = [f.name for f in list(configs_dir.glob("*.yaml")) + list(configs_dir.glob("*.yml"))]
+
+    st.subheader("Targets")
+    col1, col2 = st.columns(2)
+    with col1:
+        selected_configs = st.multiselect("Select YAML configurations (optional)", options=available_configs)
+    with col2:
+        manual_projects = st.text_input("Or enter project IDs (space/comma-separated)", placeholder="proj-a proj-b")
+
+    st.subheader("Options")
+    colm1, colm2 = st.columns(2)
+    with colm1:
+        mode = st.radio("Mode", ["Modules only (m)", "Entire project (p)"])
+    with colm2:
+        force = st.checkbox("Force (auto-approve)")
+
+    if st.button("🗑️ Destroy Now", type="primary"):
+        # Build arguments
+        args = []
+        if force:
+            args.append("--force")
+        # Add YAML paths
+        for name in selected_configs:
+            args.append(str(configs_dir / name))
+        # Add project ids
+        if manual_projects.strip():
+            import re
+            parts = [p for p in re.split(r"[\s,]+", manual_projects.strip()) if p]
+            for pid in parts:
+                args.extend(["--project", pid])
+
+        if not args:
+            st.error("Please select at least one YAML or enter at least one project ID")
+            return
+
+        # Run destroy.py non-interactively by piping the menu choice
+        # 'm' for modules, 'p' for project
+        choice = 'm' if mode.startswith("Modules") else 'p'
+        cmd = [sys.executable, str(project_root / "scripts" / "destroy.py"), *args]
+
+        st.info(f"🔧 Running: {' '.join(cmd)}")
+        try:
+            # Ensure UTF-8 so emojis/logs don't crash on Windows
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "utf-8"
+
+            proc = subprocess.Popen(
+                cmd,
+                cwd=str(project_root),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                env=env,
+            )
+            # Feed prompts like the CLI: confirm (if not forced), then action m/p
+            try:
+                if proc.stdin:
+                    if not force:
+                        proc.stdin.write("yes\n")
+                    proc.stdin.write(f"{choice}\n")
+                    proc.stdin.flush()
+            except Exception:
+                pass
+
+            output = proc.communicate(timeout=900)[0]
+            st.subheader("📋 Destroy Output")
+            st.code(output)
+
+            if proc.returncode == 0:
+                st.success("✅ Destroy completed")
+            else:
+                st.error(f"❌ Destroy exited with code {proc.returncode}")
+        except subprocess.TimeoutExpired:
+            st.error("⏰ Destroy timed out after 15 minutes")
+        except Exception as e:
+            st.error(f"💥 Destroy error: {e}")
 
 def deploy_config(config_file, plan_only=False, auto_approve=False):
     """Deploy a configuration using the existing deploy script"""
