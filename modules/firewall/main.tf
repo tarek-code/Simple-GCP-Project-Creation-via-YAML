@@ -28,9 +28,20 @@ resource "google_compute_firewall" "rules" {
   }
 
   source_ranges           = var.source_ranges
+  source_tags             = length(var.source_tags) > 0 ? var.source_tags : null
+  source_service_accounts = length(var.source_service_accounts) > 0 ? var.source_service_accounts : null
   target_tags             = length(var.target_tags) > 0 ? var.target_tags : null
   target_service_accounts = length(var.target_service_accounts) > 0 ? var.target_service_accounts : null
   destination_ranges      = var.destination_ranges
+  disabled                = var.disabled
+  description             = var.description
+
+  dynamic "log_config" {
+    for_each = var.enable_logging && var.log_config != null ? [var.log_config] : []
+    content {
+      metadata = log_config.value.metadata
+    }
+  }
 }
 
 

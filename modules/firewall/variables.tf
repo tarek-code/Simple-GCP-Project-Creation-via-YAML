@@ -79,4 +79,42 @@ variable "denies" {
   default = []
 }
 
+variable "source_tags" {
+  description = "Source instance tags"
+  type        = list(string)
+  default     = []
+}
+
+variable "source_service_accounts" {
+  description = "Source service accounts"
+  type        = list(string)
+  default     = []
+}
+
+variable "disabled" {
+  description = "Whether the firewall rule is disabled"
+  type        = bool
+  default     = false
+}
+
+variable "description" {
+  description = "Description of the firewall rule"
+  type        = string
+  default     = null
+}
+
+variable "enable_logging" {
+  description = "Enable logging for this firewall rule"
+  type        = bool
+  default     = false
+}
+
+variable "log_config" {
+  description = "Logging configuration"
+  type = object({
+    metadata = string
+  })
+  default = null
+}
+
 
