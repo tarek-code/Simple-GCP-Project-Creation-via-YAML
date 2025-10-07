@@ -174,7 +174,20 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  network        = \"{sn['network']}\"",
                 f"  private_ip_google_access = {str(sn.get('private_ip_google_access', True)).lower()}",
                 f"  purpose        = {json.dumps(sn.get('purpose'))}",
+                f"  description    = {json.dumps(sn.get('description'))}",
+                f"  reserved_internal_range = {json.dumps(sn.get('reserved_internal_range'))}",
+                f"  role           = {json.dumps(sn.get('role'))}",
+                f"  private_ipv6_google_access = {json.dumps(sn.get('private_ipv6_google_access'))}",
+                f"  stack_type     = \"{sn.get('stack_type', 'IPV4_ONLY')}\"",
+                f"  ipv6_access_type = {json.dumps(sn.get('ipv6_access_type'))}",
+                f"  external_ipv6_prefix = {json.dumps(sn.get('external_ipv6_prefix'))}",
+                f"  ip_collection  = {json.dumps(sn.get('ip_collection'))}",
+                f"  allow_subnet_cidr_routes_overlap = {str(sn.get('allow_subnet_cidr_routes_overlap', False)).lower()}",
+                f"  send_secondary_ip_range_if_empty = {str(sn.get('send_secondary_ip_range_if_empty', False)).lower()}",
+                f"  resource_manager_tags = {json.dumps(sn.get('resource_manager_tags', {}))}",
                 f"  secondary_ip_ranges = {json.dumps(sn.get('secondary_ip_ranges', []))}",
+                f"  secondary_ip_range = {json.dumps(sn.get('secondary_ip_range', []))}",
+                f"  log_config     = {json.dumps(sn.get('log_config'))}",
                 f"}}\n",
             ])
         )
@@ -220,20 +233,32 @@ def build_module_blocks(run_dir: str, project_root: str, data: dict) -> str:
                 f"  account_id   = \"{sa['account_id']}\"",
                 f"  display_name = {json.dumps(sa.get('display_name'))}",
                 f"  description  = {json.dumps(sa.get('description'))}",
+                f"  disabled     = {str(sa.get('disabled', False)).lower()}",
+                f"  create_ignore_already_exists = {str(sa.get('create_ignore_already_exists', False)).lower()}",
+                f"  roles        = {json.dumps(sa.get('roles', []))}",
+                f"  create_key   = {str(sa.get('create_key', False)).lower()}",
+                f"  key_algorithm = {json.dumps(sa.get('key_algorithm'))}",
+                f"  public_key_type = {json.dumps(sa.get('public_key_type'))}",
+                f"  private_key_type = {json.dumps(sa.get('private_key_type'))}",
+                f"  key_file_path = {json.dumps(sa.get('key_file_path'))}",
                 f"}}\n",
             ])
         )
 
-    # IAM bindings
-    for i, ib in enumerate(resources.get("iam_bindings", []) or [], start=1):
+    # IAM
+    for i, ib in enumerate(resources.get("iam", []) or [], start=1):
         blocks.append(
             "\n".join([
-                f"module \"iam_binding_{i}\" {{",
-                f"  source  = \"{mod_source('iam_binding')}\"",
+                f"module \"iam_{i}\" {{",
+                f"  source  = \"{mod_source('iam')}\"",
                 f"  project_id = var.project_id",
-                f"  role    = \"{ib['role']}\"",
+                f"  iam_type = \"{ib.get('iam_type', 'member')}\"",
+                f"  role    = {json.dumps(ib.get('role'))}",
                 f"  member  = {json.dumps(ib.get('member'))}",
                 f"  members = {json.dumps(ib.get('members', []))}",
+                f"  policy_data = {json.dumps(ib.get('policy_data'))}",
+                f"  service = {json.dumps(ib.get('service'))}",
+                f"  audit_log_configs = {json.dumps(ib.get('audit_log_configs', []))}",
                 f"  condition = {json.dumps(ib.get('condition'))}",
                 f"}}\n",
             ])

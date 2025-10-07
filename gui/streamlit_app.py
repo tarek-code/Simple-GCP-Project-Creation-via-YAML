@@ -156,11 +156,14 @@ def project_builder():
             "iam.googleapis.com", 
             "storage.googleapis.com",
             "cloudresourcemanager.googleapis.com",
-            "serviceusage.googleapis.com"
+            "serviceusage.googleapis.com",
+            "oslogin.googleapis.com",
+            "cloudtrace.googleapis.com"
         ],
         "Networking": [
             "dns.googleapis.com",
-            "vpcaccess.googleapis.com"
+            "vpcaccess.googleapis.com",
+            "networkconnectivity.googleapis.com"
         ],
         "Serverless": [
             "run.googleapis.com",
@@ -169,17 +172,50 @@ def project_builder():
         "Databases & Storage": [
             "sqladmin.googleapis.com",
             "bigquery.googleapis.com",
-            "redis.googleapis.com"
+            "bigqueryconnection.googleapis.com",
+            "bigquerydatapolicy.googleapis.com",
+            "bigquerymigration.googleapis.com",
+            "bigqueryreservation.googleapis.com",
+            "bigquerystorage.googleapis.com",
+            "redis.googleapis.com",
+            "spanner.googleapis.com",
+            "datastore.googleapis.com"
         ],
         "Security & Secrets": [
-            "secretmanager.googleapis.com"
+            "secretmanager.googleapis.com",
+            "privilegedaccessmanager.googleapis.com"
         ],
         "Messaging & Events": [
             "pubsub.googleapis.com"
         ],
         "Containers & Artifacts": [
             "container.googleapis.com",
-            "artifactregistry.googleapis.com"
+            "artifactregistry.googleapis.com",
+            "containerfilesystem.googleapis.com",
+            "containerregistry.googleapis.com"
+        ],
+        "Analytics & Data": [
+            "analyticshub.googleapis.com",
+            "dataplex.googleapis.com",
+            "dataform.googleapis.com"
+        ],
+        "AI & Machine Learning": [
+            "aiplatform.googleapis.com",
+            "generativelanguage.googleapis.com"
+        ],
+        "Monitoring & Logging": [
+            "logging.googleapis.com",
+            "monitoring.googleapis.com",
+            "cloudprofiler.googleapis.com"
+        ],
+        "Backup & Recovery": [
+            "gkebackup.googleapis.com"
+        ],
+        "Service Management": [
+            "servicemanagement.googleapis.com"
+        ],
+        "Storage & Files": [
+            "storage-api.googleapis.com"
         ]
     }
     
@@ -426,7 +462,20 @@ def project_builder():
                     "region": "us-central1",
                     "ip_cidr_range": "10.0.%d.0/24" % (i),
                     "network": (vpc_options[0] if vpc_options else ""),
-                    "private_ip_google_access": True
+                    "private_ip_google_access": True,
+                    "purpose": "PRIVATE",
+                    "description": None,
+                    "reserved_internal_range": None,
+                    "role": None,
+                    "private_ipv6_google_access": None,
+                    "stack_type": "IPV4_ONLY",
+                    "ipv6_access_type": None,
+                    "external_ipv6_prefix": None,
+                    "ip_collection": None,
+                    "allow_subnet_cidr_routes_overlap": False,
+                    "send_secondary_ip_range_if_empty": False,
+                    "resource_manager_tags": {},
+                    "log_config": None
                 })
 
             subnet = st.session_state.subnets[i]
@@ -459,14 +508,167 @@ def project_builder():
             else:
                 form_network = st.text_input("VPC Network Name", value=subnet.get('network', ''), placeholder="enter existing VPC name", key=f"subnet_network_text_{i}")
 
-            # Update subnet
-            st.session_state.subnets[i] = {
+            # Basic subnet options
+            col1, col2 = st.columns(2)
+            with col1:
+                form_private_ip_google_access = st.checkbox("Private Google Access", value=subnet.get('private_ip_google_access', True), key=f"subnet_private_ip_{i}")
+            with col2:
+                form_purpose = st.selectbox("Purpose", ["PRIVATE", "REGIONAL_MANAGED_PROXY", "GLOBAL_MANAGED_PROXY", "PRIVATE_SERVICE_CONNECT", "PEER_MIGRATION", "PRIVATE_NAT"], index=0, key=f"subnet_purpose_{i}")
+
+            # Advanced subnet options (collapsible)
+            with st.expander("🔧 Advanced Subnet Options", expanded=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    form_description = st.text_input(
+                        "Description", 
+                        value=subnet.get('description', ''),
+                        key=f"subnet_description_{i}"
+                    )
+                    form_reserved_internal_range = st.text_input(
+                        "Reserved Internal Range", 
+                        value=subnet.get('reserved_internal_range', ''),
+                        placeholder="networkconnectivity.googleapis.com/projects/PROJECT/locations/global/internalRanges/RANGE",
+                        key=f"subnet_reserved_range_{i}"
+                    )
+                    form_role = st.selectbox(
+                        "Role (for REGIONAL_MANAGED_PROXY)",
+                        ["ACTIVE", "BACKUP"],
+                        index=0 if subnet.get('role', 'ACTIVE') == 'ACTIVE' else 1,
+                        key=f"subnet_role_{i}"
+                    )
+                with col2:
+                    form_private_ipv6_google_access = st.text_input(
+                        "Private IPv6 Google Access", 
+                        value=subnet.get('private_ipv6_google_access', ''),
+                        key=f"subnet_private_ipv6_{i}"
+                    )
+                    form_external_ipv6_prefix = st.text_input(
+                        "External IPv6 Prefix", 
+                        value=subnet.get('external_ipv6_prefix', ''),
+                        key=f"subnet_external_ipv6_{i}"
+                    )
+                    form_ip_collection = st.text_input(
+                        "IP Collection (PublicDelegatedPrefix)", 
+                        value=subnet.get('ip_collection', ''),
+                        placeholder="projects/PROJECT/regions/REGION/publicDelegatedPrefixes/PREFIX",
+                        key=f"subnet_ip_collection_{i}"
+                    )
+
+                # IPv6 Configuration
+                st.markdown("**IPv6 Configuration:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    form_stack_type = st.selectbox(
+                        "Stack Type",
+                        ["IPV4_ONLY", "IPV4_IPV6", "IPV6_ONLY"],
+                        index=0 if subnet.get('stack_type', 'IPV4_ONLY') == 'IPV4_ONLY' else (1 if subnet.get('stack_type') == 'IPV4_IPV6' else 2),
+                        key=f"subnet_stack_type_{i}"
+                    )
+                with col2:
+                    form_ipv6_access_type = st.selectbox(
+                        "IPv6 Access Type",
+                        ["EXTERNAL", "INTERNAL"],
+                        index=0 if subnet.get('ipv6_access_type', 'EXTERNAL') == 'EXTERNAL' else 1,
+                        key=f"subnet_ipv6_access_{i}"
+                    )
+
+                # Advanced Configuration
+                st.markdown("**Advanced Configuration:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    form_allow_cidr_overlap = st.checkbox(
+                        "Allow Subnet CIDR Routes Overlap", 
+                        value=subnet.get('allow_subnet_cidr_routes_overlap', False),
+                        key=f"subnet_allow_overlap_{i}"
+                    )
+                with col2:
+                    form_send_secondary_empty = st.checkbox(
+                        "Send Secondary IP Range If Empty", 
+                        value=subnet.get('send_secondary_ip_range_if_empty', False),
+                        key=f"subnet_send_secondary_{i}"
+                    )
+
+                # Logging Configuration
+                st.markdown("**Logging Configuration:**")
+                form_enable_logging = st.checkbox(
+                    "Enable VPC Flow Logging", 
+                    value=subnet.get('log_config') is not None,
+                    key=f"subnet_enable_logging_{i}"
+                )
+                
+                if form_enable_logging:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        form_log_aggregation = st.selectbox(
+                            "Aggregation Interval",
+                            ["INTERVAL_5_SEC", "INTERVAL_30_SEC", "INTERVAL_1_MIN", "INTERVAL_5_MIN", "INTERVAL_10_MIN", "INTERVAL_15_MIN"],
+                            index=0,
+                            key=f"subnet_log_aggregation_{i}"
+                        )
+                    with col2:
+                        form_log_sampling = st.number_input(
+                            "Flow Sampling (0.0-1.0)", 
+                            value=0.5, 
+                            min_value=0.0, 
+                            max_value=1.0, 
+                            step=0.1,
+                            key=f"subnet_log_sampling_{i}"
+                        )
+                    with col3:
+                        form_log_metadata = st.selectbox(
+                            "Log Metadata",
+                            ["INCLUDE_ALL_METADATA", "EXCLUDE_ALL_METADATA", "CUSTOM_METADATA"],
+                            index=0,
+                            key=f"subnet_log_metadata_{i}"
+                        )
+
+                # Resource Manager Tags
+                st.markdown("**Resource Manager Tags:**")
+                form_resource_tags = st.text_input(
+                    "Resource Manager Tags (JSON format)", 
+                    value=json.dumps(subnet.get('resource_manager_tags', {}), indent=2),
+                    placeholder='{"tagKeys/123": "tagValues/456"}',
+                    key=f"subnet_resource_tags_{i}"
+                )
+
+            # Parse resource manager tags
+            try:
+                resource_tags = json.loads(form_resource_tags) if form_resource_tags and form_resource_tags.strip() else {}
+            except json.JSONDecodeError:
+                resource_tags = {}
+
+            # Build log config if logging is enabled
+            log_config = None
+            if form_enable_logging:
+                log_config = {
+                    "aggregation_interval": form_log_aggregation,
+                    "flow_sampling": form_log_sampling,
+                    "metadata": form_log_metadata
+                }
+
+            # Update subnet data
+            subnet_data = {
                 "name": form_name,
                 "region": form_region,
                 "ip_cidr_range": form_cidr,
                 "network": form_network,
-                "private_ip_google_access": bool(subnet.get('private_ip_google_access', True))
+                "private_ip_google_access": form_private_ip_google_access,
+                "purpose": form_purpose,
+                "description": form_description if form_description and form_description.strip() else None,
+                "reserved_internal_range": form_reserved_internal_range if form_reserved_internal_range and form_reserved_internal_range.strip() else None,
+                "role": form_role if form_purpose == "REGIONAL_MANAGED_PROXY" else None,
+                "private_ipv6_google_access": form_private_ipv6_google_access if form_private_ipv6_google_access and form_private_ipv6_google_access.strip() else None,
+                "stack_type": form_stack_type,
+                "ipv6_access_type": form_ipv6_access_type if form_stack_type != "IPV4_ONLY" else None,
+                "external_ipv6_prefix": form_external_ipv6_prefix if form_external_ipv6_prefix and form_external_ipv6_prefix.strip() else None,
+                "ip_collection": form_ip_collection if form_ip_collection and form_ip_collection.strip() else None,
+                "allow_subnet_cidr_routes_overlap": form_allow_cidr_overlap,
+                "send_secondary_ip_range_if_empty": form_send_secondary_empty,
+                "resource_manager_tags": resource_tags,
+                "log_config": log_config
             }
+
+            st.session_state.subnets[i] = subnet_data
 
         if st.button("➕ Add Another Subnet", key="add_subnet_section"):
             st.session_state.subnet_form_count += 1
@@ -658,106 +860,458 @@ def project_builder():
         st.markdown("**Service Account Configuration**")
         if 'service_accounts' not in st.session_state:
             st.session_state.service_accounts = []
-        
-        # Display existing service accounts with inline editing
-        if st.session_state.service_accounts:
-            st.markdown("**Current Service Accounts:**")
-            for i, sa in enumerate(list(st.session_state.service_accounts)):
-                col1, col2, col3 = st.columns([3, 2, 1])
-                with col1:
-                    new_id = st.text_input("Account ID", value=sa['account_id'], key=f"sa_id_{i}")
-                with col2:
-                    new_display = st.text_input("Display Name", value=sa.get('display_name', ''), key=f"sa_display_{i}")
-                with col3:
-                    if st.button("🗑️", key=f"del_sa_{i}"):
-                        st.session_state.service_accounts.pop(i)
-                        st.rerun()
-                
-                # Update if changed
-                if new_id != sa['account_id'] or new_display != sa.get('display_name', ''):
-                    st.session_state.service_accounts[i]['account_id'] = new_id
-                    st.session_state.service_accounts[i]['display_name'] = new_display
-        
-        # Add new service account
-        st.markdown("**Add New Service Account:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            sa_id = st.text_input("Account ID", value="my-service-account", key="new_sa_id")
-        with col2:
-            sa_display = st.text_input("Display Name", value="My Service Account", key="new_sa_display")
-        with col3:
-            if st.button("➕ Add", key="add_service_account"):
-                if sa_id:
-                    new_sa = {
-                        "account_id": sa_id,
-                        "display_name": sa_display,
-                        "description": "Service account created via GUI"
-                    }
-                    st.session_state.service_accounts.append(new_sa)
+        if 'service_account_form_count' not in st.session_state:
+            st.session_state.service_account_form_count = 1
+
+        for i in range(st.session_state.service_account_form_count):
+            if i > 0:
+                st.markdown("---")
+
+            # Ensure data object exists
+            if i >= len(st.session_state.service_accounts):
+                st.session_state.service_accounts.append({
+                    "account_id": f"service-account-{i+1}",
+                    "display_name": f"Service Account {i+1}",
+                    "description": "Service account created via GUI",
+                    "disabled": False,
+                    "create_ignore_already_exists": False,
+                    "roles": [],
+                    "create_key": False,
+                    "key_algorithm": "KEY_ALG_RSA_2048",
+                    "public_key_type": "TYPE_X509_PEM_FILE",
+                    "private_key_type": "TYPE_GOOGLE_CREDENTIALS_FILE",
+                    "key_file_path": None
+                })
+
+            sa = st.session_state.service_accounts[i]
+
+            st.markdown(f"**Service Account {i+1}:**")
+            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+            with col1:
+                form_account_id = st.text_input("Account ID", value=sa.get('account_id', ''), key=f"sa_account_id_{i}")
+            with col2:
+                form_display_name = st.text_input("Display Name", value=sa.get('display_name', ''), key=f"sa_display_name_{i}")
+            with col3:
+                form_description = st.text_input("Description", value=sa.get('description', ''), key=f"sa_description_{i}")
+            with col4:
+                if st.button("🗑️", key=f"del_sa_{i}"):
+                    st.session_state.service_accounts.pop(i)
+                    st.session_state.service_account_form_count -= 1
                     st.rerun()
-        
+
+            # Permissions/Roles selection
+            st.markdown("**Permissions:**")
+            common_roles = [
+                # Basic IAM Roles
+                "roles/browser",
+                "roles/viewer", 
+                "roles/editor",
+                "roles/owner",
+                # Storage Roles
+                "roles/storage.objectViewer",
+                "roles/storage.objectCreator", 
+                "roles/storage.objectAdmin",
+                # Compute Roles
+                "roles/compute.instanceAdmin",
+                "roles/compute.networkViewer",
+                # Logging & Monitoring
+                "roles/logging.logWriter",
+                "roles/monitoring.metricWriter",
+                # Security Roles
+                "roles/secretmanager.secretAccessor",
+                "roles/iam.serviceAccountUser",
+                "roles/iam.serviceAccountTokenCreator",
+                # Database Roles
+                "roles/cloudsql.client",
+                # Analytics Roles
+                "roles/bigquery.dataViewer",
+                "roles/bigquery.dataEditor",
+                # Serverless Roles
+                "roles/run.invoker",
+                "roles/cloudfunctions.invoker"
+            ]
+            
+            # Get current roles or default to empty list
+            current_roles = sa.get('roles', [])
+            form_roles = st.multiselect(
+                "IAM Roles",
+                common_roles,
+                default=current_roles,
+                key=f"sa_roles_{i}",
+                help="Select IAM roles to assign to this service account"
+            )
+
+            # Advanced service account options (collapsible)
+            with st.expander("🔧 Advanced Service Account Options", expanded=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    form_disabled = st.checkbox(
+                        "Disabled", 
+                        value=sa.get('disabled', False),
+                        key=f"sa_disabled_{i}"
+                    )
+                with col2:
+                    form_ignore_exists = st.checkbox(
+                        "Ignore Already Exists", 
+                        value=sa.get('create_ignore_already_exists', False),
+                        key=f"sa_ignore_exists_{i}"
+                    )
+                
+                # Custom roles input
+                st.markdown("**Custom Roles:**")
+                form_custom_roles = st.text_area(
+                    "Custom IAM Roles (one per line)",
+                    value="\n".join([role for role in current_roles if role not in common_roles]),
+                    key=f"sa_custom_roles_{i}",
+                    help="Enter custom IAM roles that are not in the common list above"
+                )
+
+            # Key Management section
+            st.markdown("**Key Management:**")
+            form_create_key = st.checkbox(
+                "Create Service Account Key", 
+                value=sa.get('create_key', False),
+                key=f"sa_create_key_{i}",
+                help="Generate a new service account key for this service account"
+            )
+            
+            if form_create_key:
+                col1, col2 = st.columns(2)
+                with col1:
+                    form_key_algorithm = st.selectbox(
+                        "Key Algorithm",
+                        ["KEY_ALG_RSA_1024", "KEY_ALG_RSA_2048"],
+                        index=1 if sa.get('key_algorithm', 'KEY_ALG_RSA_2048') == 'KEY_ALG_RSA_2048' else 0,
+                        key=f"sa_key_algorithm_{i}"
+                    )
+                    form_public_key_type = st.selectbox(
+                        "Public Key Type",
+                        ["TYPE_NONE", "TYPE_X509_PEM_FILE", "TYPE_RAW_PUBLIC_KEY"],
+                        index=1 if sa.get('public_key_type', 'TYPE_X509_PEM_FILE') == 'TYPE_X509_PEM_FILE' else 0,
+                        key=f"sa_public_key_type_{i}"
+                    )
+                with col2:
+                    form_private_key_type = st.selectbox(
+                        "Private Key Type",
+                        ["TYPE_UNSPECIFIED", "TYPE_PKCS12_FILE", "TYPE_GOOGLE_CREDENTIALS_FILE"],
+                        index=2 if sa.get('private_key_type', 'TYPE_GOOGLE_CREDENTIALS_FILE') == 'TYPE_GOOGLE_CREDENTIALS_FILE' else 0,
+                        key=f"sa_private_key_type_{i}"
+                    )
+                    form_key_file_path = st.text_input(
+                        "Key File Path (optional)",
+                        value=sa.get('key_file_path', ''),
+                        placeholder="/path/to/save/key.json",
+                        key=f"sa_key_file_path_{i}",
+                        help="Optional: Path to save the service account key file"
+                    )
+
+            # Parse custom roles from text area
+            custom_roles = []
+            if form_custom_roles and form_custom_roles.strip():
+                custom_roles = [role.strip() for role in form_custom_roles.split('\n') if role.strip()]
+            
+            # Combine common roles and custom roles
+            all_roles = form_roles + custom_roles
+
+            # Update service account data
+            st.session_state.service_accounts[i] = {
+                "account_id": form_account_id,
+                "display_name": form_display_name,
+                "description": form_description if form_description and form_description.strip() else None,
+                "disabled": form_disabled,
+                "create_ignore_already_exists": form_ignore_exists,
+                "roles": all_roles,
+                "create_key": form_create_key,
+                "key_algorithm": form_key_algorithm if form_create_key else None,
+                "public_key_type": form_public_key_type if form_create_key else None,
+                "private_key_type": form_private_key_type if form_create_key else None,
+                "key_file_path": form_key_file_path if form_create_key and form_key_file_path and form_key_file_path.strip() else None
+            }
+
+        # Add button to create another service account
+        if st.button("➕ Add Another Service Account", key="add_sa_section"):
+            st.session_state.service_account_form_count += 1
+            st.rerun()
+
         if st.session_state.service_accounts:
             resources["service_accounts"] = st.session_state.service_accounts
     
-    # IAM Bindings
-    if st.checkbox("🔐 Create IAM Bindings"):
-        st.markdown("**IAM Binding Configuration**")
-        if 'iam_bindings' not in st.session_state:
-            st.session_state.iam_bindings = []
-        
-        # Display existing bindings with inline editing
-        if st.session_state.iam_bindings:
-            st.markdown("**Current IAM Bindings:**")
-            for i, binding in enumerate(list(st.session_state.iam_bindings)):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    new_role = st.selectbox("Role", [
+    # IAM
+    if st.checkbox("🔐 Create IAM Policies"):
+        st.markdown("**IAM Configuration**")
+        if 'iam' not in st.session_state:
+            st.session_state.iam = []
+        if 'iam_form_count' not in st.session_state:
+            st.session_state.iam_form_count = 1
+
+        for i in range(st.session_state.iam_form_count):
+            if i > 0:
+                st.markdown("---")
+
+            # Ensure data object exists
+            if i >= len(st.session_state.iam):
+                st.session_state.iam.append({
+                    "iam_type": "member",
+                    "role": "roles/viewer",
+                    "member": "user:example@domain.com",
+                    "members": [],
+                    "policy_data": None,
+                    "service": None,
+                    "audit_log_configs": [],
+                    "condition": None
+                })
+
+            binding = st.session_state.iam[i]
+
+            st.markdown(f"**IAM Policy {i+1}:**")
+            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+            with col1:
+                form_iam_type = st.selectbox(
+                    "IAM Type",
+                    ["member", "binding", "policy", "audit_config"],
+                    index=["member", "binding", "policy", "audit_config"].index(binding.get('iam_type', 'member')),
+                    key=f"iam_type_{i}"
+                )
+            with col2:
+                if form_iam_type in ["member", "binding"]:
+                    # Common IAM roles
+                    common_roles = [
+                        "Custom Role",  # Allow custom role input
+                        "roles/owner",
+                        "roles/editor", 
+                        "roles/viewer",
+                        "roles/browser",
+                        "roles/iam.serviceAccountUser",
+                        "roles/iam.serviceAccountTokenCreator",
+                        "roles/iam.serviceAccountKeyAdmin",
+                        "roles/iam.serviceAccountAdmin",
+                        "roles/iam.organizationRoleAdmin",
+                        "roles/iam.roleAdmin",
+                        "roles/iam.workloadIdentityUser",
                         "roles/storage.admin",
-                        "roles/compute.admin", 
-                        "roles/editor",
-                        "roles/viewer"
-                    ], index=[
-                        "roles/storage.admin",
-                        "roles/compute.admin", 
-                        "roles/editor",
-                        "roles/viewer"
-                    ].index(binding['role']), key=f"iam_role_{i}")
-                with col2:
-                    new_member = st.text_input("Member", value=binding['member'], key=f"iam_member_{i}")
-                with col3:
-                    if st.button("🗑️", key=f"del_iam_{i}"):
-                        st.session_state.iam_bindings.pop(i)
-                        st.rerun()
-                
-                # Update if changed
-                if new_role != binding['role'] or new_member != binding['member']:
-                    st.session_state.iam_bindings[i]['role'] = new_role
-                    st.session_state.iam_bindings[i]['member'] = new_member
-        
-        # Add new binding
-        st.markdown("**Add New IAM Binding:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            iam_role = st.selectbox("Role", [
-                "roles/storage.admin",
-                "roles/compute.admin", 
-                "roles/editor",
-                "roles/viewer"
-            ], key="new_iam_role")
-        with col2:
-            iam_member = st.text_input("Member", value="user:example@domain.com", key="new_iam_member")
-        with col3:
-            if st.button("➕ Add", key="add_iam_binding"):
-                if iam_role and iam_member:
-                    new_binding = {
-                        "role": iam_role,
-                        "member": iam_member
-                    }
-                    st.session_state.iam_bindings.append(new_binding)
+                        "roles/storage.objectAdmin",
+                        "roles/storage.objectCreator",
+                        "roles/storage.objectViewer",
+                        "roles/compute.admin",
+                        "roles/compute.instanceAdmin",
+                        "roles/compute.instanceAdmin.v1",
+                        "roles/compute.networkAdmin",
+                        "roles/compute.securityAdmin",
+                        "roles/compute.viewer",
+                        "roles/container.admin",
+                        "roles/container.clusterAdmin",
+                        "roles/container.developer",
+                        "roles/container.viewer",
+                        "roles/cloudsql.admin",
+                        "roles/cloudsql.client",
+                        "roles/cloudsql.viewer",
+                        "roles/secretmanager.admin",
+                        "roles/secretmanager.secretAccessor",
+                        "roles/secretmanager.viewer",
+                        "roles/pubsub.admin",
+                        "roles/pubsub.editor",
+                        "roles/pubsub.publisher",
+                        "roles/pubsub.subscriber",
+                        "roles/pubsub.viewer",
+                        "roles/cloudfunctions.admin",
+                        "roles/cloudfunctions.developer",
+                        "roles/cloudfunctions.invoker",
+                        "roles/cloudfunctions.viewer",
+                        "roles/run.admin",
+                        "roles/run.developer",
+                        "roles/run.invoker",
+                        "roles/run.viewer",
+                        "roles/logging.admin",
+                        "roles/logging.viewer",
+                        "roles/monitoring.admin",
+                        "roles/monitoring.viewer",
+                        "roles/securitycenter.admin",
+                        "roles/securitycenter.viewer",
+                        "roles/dns.admin",
+                        "roles/dns.reader",
+                        "roles/firebase.admin",
+                        "roles/firebase.analyticsAdmin",
+                        "roles/firebase.analyticsViewer",
+                        "roles/bigquery.admin",
+                        "roles/bigquery.dataEditor",
+                        "roles/bigquery.dataViewer",
+                        "roles/bigquery.jobUser",
+                        "roles/bigquery.user",
+                        "roles/artifactregistry.admin",
+                        "roles/artifactregistry.reader",
+                        "roles/artifactregistry.writer"
+                    ]
+                    
+                    # Get current role value
+                    current_role = binding.get('role', '')
+                    
+                    # If current role is not in the list, add it as custom option
+                    if current_role and current_role not in common_roles:
+                        common_roles.insert(0, current_role)
+                    
+                    form_role = st.selectbox(
+                        "Role", 
+                        options=common_roles,
+                        index=common_roles.index(current_role) if current_role in common_roles else 0,
+                        key=f"iam_role_{i}",
+                        help="Select a predefined role or choose custom for manual entry"
+                    )
+                    
+                    # Show custom role input if "Custom Role" is selected
+                    if form_role == "Custom Role":
+                        form_role = st.text_input(
+                            "Custom Role", 
+                            value="",
+                            placeholder="roles/custom.role",
+                            key=f"iam_custom_role_{i}"
+                        )
+                elif form_iam_type == "policy":
+                    form_policy_data = st.text_area(
+                        "Policy Data (JSON)", 
+                        value=binding.get('policy_data', ''),
+                        placeholder='{"bindings": [{"role": "roles/viewer", "members": ["user:example@domain.com"]}]}',
+                        key=f"iam_policy_data_{i}"
+                    )
+                else:  # audit_config
+                    form_service = st.text_input(
+                        "Service", 
+                        value=binding.get('service', ''),
+                        placeholder="allServices or compute.googleapis.com",
+                        key=f"iam_service_{i}"
+                    )
+            with col3:
+                if form_iam_type == "member":
+                    form_member = st.text_input(
+                        "Member", 
+                        value=binding.get('member', ''),
+                        placeholder="user:example@domain.com",
+                        key=f"iam_member_{i}"
+                    )
+                elif form_iam_type == "binding":
+                    form_members = st.text_area(
+                        "Members (one per line)", 
+                        value="\n".join(binding.get('members', [])),
+                        placeholder="user:example@domain.com\nserviceAccount:sa@project.iam.gserviceaccount.com",
+                        key=f"iam_members_{i}"
+                    )
+                elif form_iam_type == "audit_config":
+                    form_audit_logs = st.text_area(
+                        "Audit Log Configs (JSON)", 
+                        value=json.dumps(binding.get('audit_log_configs', []), indent=2),
+                        placeholder='[{"log_type": "ADMIN_READ", "exempted_members": []}]',
+                        key=f"iam_audit_logs_{i}"
+                    )
+            with col4:
+                if st.button("🗑️", key=f"del_iam_{i}"):
+                    st.session_state.iam.pop(i)
+                    st.session_state.iam_form_count -= 1
                     st.rerun()
-        
-        if st.session_state.iam_bindings:
-            resources["iam_bindings"] = st.session_state.iam_bindings
+
+            # IAM Conditions (for member and binding types)
+            if form_iam_type in ["member", "binding"]:
+                with st.expander("🔧 IAM Conditions (Optional)", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_condition_title = st.text_input(
+                            "Condition Title", 
+                            value=binding.get('condition', {}).get('title', '') if binding.get('condition') else '',
+                            placeholder="expires_after_2024",
+                            key=f"iam_condition_title_{i}"
+                        )
+                    with col2:
+                        form_condition_expression = st.text_input(
+                            "Condition Expression", 
+                            value=binding.get('condition', {}).get('expression', '') if binding.get('condition') else '',
+                            placeholder='request.time < timestamp("2024-12-31T23:59:59Z")',
+                            key=f"iam_condition_expression_{i}"
+                        )
+                    form_condition_description = st.text_input(
+                        "Condition Description (Optional)", 
+                        value=binding.get('condition', {}).get('description', '') if binding.get('condition') else '',
+                        placeholder="Access expires at end of 2024",
+                        key=f"iam_condition_description_{i}"
+                    )
+
+            # Parse data based on IAM type
+            if form_iam_type == "member":
+                members_list = []
+                condition = None
+                if form_condition_title and form_condition_expression:
+                    condition = {
+                        "title": form_condition_title,
+                        "expression": form_condition_expression,
+                        "description": form_condition_description if form_condition_description else None
+                    }
+            elif form_iam_type == "binding":
+                members_list = [m.strip() for m in form_members.split('\n') if m.strip()] if form_members else []
+                condition = None
+                if form_condition_title and form_condition_expression:
+                    condition = {
+                        "title": form_condition_title,
+                        "expression": form_condition_expression,
+                        "description": form_condition_description if form_condition_description else None
+                    }
+            elif form_iam_type == "policy":
+                policy_data = form_policy_data if form_policy_data and form_policy_data.strip() else None
+            elif form_iam_type == "audit_config":
+                try:
+                    audit_logs = json.loads(form_audit_logs) if form_audit_logs and form_audit_logs.strip() else []
+                except json.JSONDecodeError:
+                    audit_logs = []
+
+            # Update IAM binding data
+            if form_iam_type == "member":
+                st.session_state.iam[i] = {
+                    "iam_type": form_iam_type,
+                    "role": form_role,
+                    "member": form_member,
+                    "members": [],
+                    "policy_data": None,
+                    "service": None,
+                    "audit_log_configs": [],
+                    "condition": condition
+                }
+            elif form_iam_type == "binding":
+                st.session_state.iam[i] = {
+                    "iam_type": form_iam_type,
+                    "role": form_role,
+                    "member": None,
+                    "members": members_list,
+                    "policy_data": None,
+                    "service": None,
+                    "audit_log_configs": [],
+                    "condition": condition
+                }
+            elif form_iam_type == "policy":
+                st.session_state.iam[i] = {
+                    "iam_type": form_iam_type,
+                    "role": None,
+                    "member": None,
+                    "members": [],
+                    "policy_data": policy_data,
+                    "service": None,
+                    "audit_log_configs": [],
+                    "condition": None
+                }
+            elif form_iam_type == "audit_config":
+                st.session_state.iam[i] = {
+                    "iam_type": form_iam_type,
+                    "role": None,
+                    "member": None,
+                    "members": [],
+                    "policy_data": None,
+                    "service": form_service,
+                    "audit_log_configs": audit_logs,
+                    "condition": None
+                }
+
+        # Add button to create another IAM policy
+        if st.button("➕ Add Another IAM Policy", key="add_iam_section"):
+            st.session_state.iam_form_count += 1
+            st.rerun()
+
+        if st.session_state.iam:
+            resources["iam"] = st.session_state.iam
     
     # Compute Instances
     if st.checkbox("💻 Create Compute Instances"):
@@ -1449,8 +2003,37 @@ def project_builder():
         # Use only current resources (checkbox-controlled)
         config["resources"] = resources
         
-        # Display the configuration
-        st.code(yaml.dump(dict(config), default_flow_style=False, sort_keys=False), language="yaml")
+        # Function to clean null values from nested dictionaries
+        def clean_null_values(obj):
+            if isinstance(obj, dict):
+                return {k: clean_null_values(v) for k, v in obj.items() if v is not None and v != "" and v != [] and v != {}}
+            elif isinstance(obj, list):
+                return [clean_null_values(item) for item in obj if item is not None and item != "" and item != [] and item != {}]
+            else:
+                return obj
+        
+        # Display the configuration - only include non-empty sections
+        filtered_config = {}
+        
+        # Always include project_id and billing_account
+        filtered_config["project_id"] = config["project_id"]
+        filtered_config["billing_account"] = config["billing_account"]
+        
+        # Only include labels if not empty
+        if config.get("labels") and any(config["labels"].values()):
+            filtered_config["labels"] = config["labels"]
+        
+        # Only include apis if not empty
+        if config.get("apis") and len(config["apis"]) > 0:
+            filtered_config["apis"] = config["apis"]
+        
+        # Only include resources if not empty, and clean up null values
+        if config.get("resources") and any(config["resources"].values()):
+            cleaned_resources = clean_null_values(config["resources"])
+            if cleaned_resources:  # Only include if there are any resources after cleaning
+                filtered_config["resources"] = cleaned_resources
+        
+        st.code(yaml.dump(filtered_config, default_flow_style=False, sort_keys=False), language="yaml")
         
         # Save to session state
         st.session_state.generated_config = config
@@ -1458,8 +2041,8 @@ def project_builder():
         
         st.success(f"Configuration generated for project: {project_id}")
         
-        # Download button
-        yaml_content = yaml.dump(config, default_flow_style=False)
+        # Download button - use the same filtered config
+        yaml_content = yaml.dump(filtered_config, default_flow_style=False)
         st.download_button(
             label="📥 Download YAML Configuration",
             data=yaml_content,
@@ -1802,6 +2385,67 @@ def help_examples():
     4. **Deploy**: Use the Deploy & Monitor page to deploy your configuration
     5. **Monitor**: Watch the deployment progress and check for any errors
     """)
+    
+    # API Configuration
+    st.subheader("🔌 API Configuration")
+    st.markdown("**Available API Categories:**")
+    st.markdown("""
+    - **Core Infrastructure**: Compute, IAM, Storage, Resource Manager, Service Usage, OS Login, Cloud Trace
+    - **Networking**: DNS, VPC Access, Network Connectivity
+    - **Serverless**: Cloud Run, Cloud Functions
+    - **Databases & Storage**: Cloud SQL, BigQuery (all variants), Redis, Spanner, Datastore
+    - **Security & Secrets**: Secret Manager, Privileged Access Manager
+    - **Messaging & Events**: Pub/Sub
+    - **Containers & Artifacts**: GKE, Artifact Registry, Container Registry, Container File System
+    - **Analytics & Data**: Analytics Hub, BigQuery, Dataplex, Dataform
+    - **AI & Machine Learning**: Vertex AI, Gemini for Google Cloud
+    - **Monitoring & Logging**: Cloud Logging, Cloud Monitoring, Cloud Profiler
+    - **Backup & Recovery**: Backup for GKE
+    - **Service Management**: Service Management, Service Usage
+    - **Storage & Files**: Cloud Storage, Cloud Storage JSON API
+    """)
+    
+    st.markdown("**Basic API Configuration**")
+    basic_api_example = {
+        "project_id": "my-basic-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": [
+            "compute.googleapis.com",
+            "storage.googleapis.com",
+            "iam.googleapis.com"
+        ]
+    }
+    st.code(yaml.dump(basic_api_example, default_flow_style=False), language="yaml")
+    
+    st.markdown("**Comprehensive API Configuration**")
+    comprehensive_api_example = {
+        "project_id": "my-comprehensive-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": [
+            "compute.googleapis.com",
+            "iam.googleapis.com",
+            "storage.googleapis.com",
+            "cloudresourcemanager.googleapis.com",
+            "serviceusage.googleapis.com",
+            "dns.googleapis.com",
+            "run.googleapis.com",
+            "cloudfunctions.googleapis.com",
+            "bigquery.googleapis.com",
+            "sqladmin.googleapis.com",
+            "container.googleapis.com",
+            "artifactregistry.googleapis.com",
+            "pubsub.googleapis.com",
+            "secretmanager.googleapis.com",
+            "logging.googleapis.com",
+            "monitoring.googleapis.com",
+            "aiplatform.googleapis.com",
+            "analyticshub.googleapis.com",
+            "dataplex.googleapis.com",
+            "spanner.googleapis.com",
+            "datastore.googleapis.com"
+        ]
+    }
+    st.code(yaml.dump(comprehensive_api_example, default_flow_style=False), language="yaml")
     
     # Example configurations
     st.subheader("📝 Example Configurations")
@@ -2167,6 +2811,501 @@ def help_examples():
         }
     }
     st.code(yaml.dump(network_profile_vpc_example, default_flow_style=False), language="yaml")
+    
+    # Subnet Examples
+    st.subheader("📡 Subnet Configuration Examples")
+    
+    # Basic Subnet Example
+    st.markdown("**Basic Subnet**")
+    basic_subnet_example = {
+        "project_id": "my-subnet-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["compute.googleapis.com"],
+        "resources": {
+            "vpcs": [{
+                "name": "my-vpc",
+                "routing_mode": "GLOBAL"
+            }],
+            "subnets": [{
+                "name": "my-subnet",
+                "region": "us-central1",
+                "ip_cidr_range": "10.0.0.0/24",
+                "network": "my-vpc",
+                "private_ip_google_access": True
+            }]
+        }
+    }
+    st.code(yaml.dump(basic_subnet_example, default_flow_style=False), language="yaml")
+    
+    # Advanced Subnet Example
+    st.markdown("**Advanced Subnet with IPv6 and Logging**")
+    advanced_subnet_example = {
+        "project_id": "my-advanced-subnet-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["compute.googleapis.com"],
+        "resources": {
+            "vpcs": [{
+                "name": "production-vpc",
+                "routing_mode": "GLOBAL",
+                "enable_ula_internal_ipv6": True
+            }],
+            "subnets": [{
+                "name": "production-subnet",
+                "region": "us-central1",
+                "ip_cidr_range": "10.0.0.0/24",
+                "network": "production-vpc",
+                "description": "Production subnet with advanced features",
+                "private_ip_google_access": True,
+                "stack_type": "IPV4_IPV6",
+                "ipv6_access_type": "EXTERNAL",
+                "log_config": {
+                    "aggregation_interval": "INTERVAL_10_MIN",
+                    "flow_sampling": 0.5,
+                    "metadata": "INCLUDE_ALL_METADATA"
+                },
+                "resource_manager_tags": {
+                    "tagKeys/123": "tagValues/456"
+                }
+            }]
+        }
+    }
+    st.code(yaml.dump(advanced_subnet_example, default_flow_style=False), language="yaml")
+    
+    # Load Balancer Subnet Example
+    st.markdown("**Load Balancer Subnet (REGIONAL_MANAGED_PROXY)**")
+    lb_subnet_example = {
+        "project_id": "my-lb-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["compute.googleapis.com"],
+        "resources": {
+            "vpcs": [{
+                "name": "lb-vpc",
+                "routing_mode": "GLOBAL"
+            }],
+            "subnets": [{
+                "name": "lb-subnet",
+                "region": "us-central1",
+                "ip_cidr_range": "10.0.0.0/24",
+                "network": "lb-vpc",
+                "purpose": "REGIONAL_MANAGED_PROXY",
+                "role": "ACTIVE",
+                "description": "Load balancer subnet for regional Envoy-based load balancers"
+            }]
+        }
+    }
+    st.code(yaml.dump(lb_subnet_example, default_flow_style=False), language="yaml")
+    
+    # Private Service Connect Subnet Example
+    st.markdown("**Private Service Connect Subnet**")
+    psc_subnet_example = {
+        "project_id": "my-psc-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["compute.googleapis.com"],
+        "resources": {
+            "vpcs": [{
+                "name": "psc-vpc",
+                "routing_mode": "GLOBAL"
+            }],
+            "subnets": [{
+                "name": "psc-subnet",
+                "region": "us-central1",
+                "ip_cidr_range": "10.0.0.0/24",
+                "network": "psc-vpc",
+                "purpose": "PRIVATE_SERVICE_CONNECT",
+                "description": "Private Service Connect subnet for hosting published services"
+            }]
+        }
+    }
+    st.code(yaml.dump(psc_subnet_example, default_flow_style=False), language="yaml")
+    
+    # IPv6 Subnet Example
+    st.markdown("**IPv6 Subnet with External Access**")
+    ipv6_subnet_example = {
+        "project_id": "my-ipv6-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["compute.googleapis.com"],
+        "resources": {
+            "vpcs": [{
+                "name": "ipv6-vpc",
+                "routing_mode": "GLOBAL"
+            }],
+            "subnets": [{
+                "name": "ipv6-subnet",
+                "region": "us-west2",
+                "ip_cidr_range": "10.0.0.0/22",
+                "network": "ipv6-vpc",
+                "stack_type": "IPV4_IPV6",
+                "ipv6_access_type": "EXTERNAL",
+                "description": "Dual-stack subnet with external IPv6 access"
+            }]
+        }
+    }
+    st.code(yaml.dump(ipv6_subnet_example, default_flow_style=False), language="yaml")
+    
+    # Private NAT Subnet Example
+    st.markdown("**Private NAT Subnet**")
+    private_nat_subnet_example = {
+        "project_id": "my-nat-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["compute.googleapis.com"],
+        "resources": {
+            "vpcs": [{
+                "name": "nat-vpc",
+                "routing_mode": "GLOBAL"
+            }],
+            "subnets": [{
+                "name": "nat-subnet",
+                "region": "us-west2",
+                "ip_cidr_range": "192.168.1.0/24",
+                "network": "nat-vpc",
+                "purpose": "PRIVATE_NAT",
+                "description": "Private NAT subnet for NAT gateway source range"
+            }]
+        }
+    }
+    st.code(yaml.dump(private_nat_subnet_example, default_flow_style=False), language="yaml")
+    
+    # Service Account Examples
+    st.subheader("👤 Service Account Configuration Examples")
+    
+    # Basic Service Account Example
+    st.markdown("**Basic Service Account**")
+    basic_sa_example = {
+        "project_id": "my-sa-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [{
+                "account_id": "my-service-account",
+                "display_name": "My Service Account"
+            }]
+        }
+    }
+    st.code(yaml.dump(basic_sa_example, default_flow_style=False), language="yaml")
+    
+    # Advanced Service Account Example
+    st.markdown("**Advanced Service Account with All Options**")
+    advanced_sa_example = {
+        "project_id": "my-advanced-sa-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [{
+                "account_id": "production-service-account",
+                "display_name": "Production Service Account",
+                "description": "Service account for production workloads with advanced configuration",
+                "disabled": False,
+                "create_ignore_already_exists": True
+            }]
+        }
+    }
+    st.code(yaml.dump(advanced_sa_example, default_flow_style=False), language="yaml")
+    
+    # Multiple Service Accounts Example
+    st.markdown("**Multiple Service Accounts for Different Purposes**")
+    multiple_sa_example = {
+        "project_id": "my-multi-sa-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [
+                {
+                    "account_id": "web-server-sa",
+                    "display_name": "Web Server Service Account",
+                    "description": "Service account for web server instances"
+                },
+                {
+                    "account_id": "database-sa",
+                    "display_name": "Database Service Account",
+                    "description": "Service account for database operations"
+                },
+                {
+                    "account_id": "monitoring-sa",
+                    "display_name": "Monitoring Service Account",
+                    "description": "Service account for monitoring and logging",
+                    "disabled": False,
+                    "create_ignore_already_exists": False
+                }
+            ]
+        }
+    }
+    st.code(yaml.dump(multiple_sa_example, default_flow_style=False), language="yaml")
+    
+    # Disabled Service Account Example
+    st.markdown("**Disabled Service Account**")
+    disabled_sa_example = {
+        "project_id": "my-disabled-sa-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [{
+                "account_id": "deprecated-sa",
+                "display_name": "Deprecated Service Account",
+                "description": "This service account is being phased out",
+                "disabled": True,
+                "create_ignore_already_exists": True
+            }]
+        }
+    }
+    st.code(yaml.dump(disabled_sa_example, default_flow_style=False), language="yaml")
+    
+    # Service Account with Permissions Example
+    st.markdown("**Service Account with Permissions/Roles**")
+    sa_with_permissions_example = {
+        "project_id": "my-sa-permissions-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [{
+                "account_id": "app-service-account",
+                "display_name": "Application Service Account",
+                "description": "Service account for application workloads with specific permissions",
+                "roles": [
+                    "roles/storage.objectViewer",
+                    "roles/logging.logWriter",
+                    "roles/monitoring.metricWriter"
+                ]
+            }]
+        }
+    }
+    st.code(yaml.dump(sa_with_permissions_example, default_flow_style=False), language="yaml")
+    
+    # Service Account with Custom Roles Example
+    st.markdown("**Service Account with Custom Roles**")
+    sa_with_custom_roles_example = {
+        "project_id": "my-sa-custom-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [{
+                "account_id": "admin-service-account",
+                "display_name": "Admin Service Account",
+                "description": "Service account with custom admin roles",
+                "roles": [
+                    "roles/storage.objectAdmin",
+                    "roles/compute.instanceAdmin",
+                    "roles/iam.serviceAccountUser",
+                    "roles/secretmanager.secretAccessor"
+                ]
+            }]
+        }
+    }
+    st.code(yaml.dump(sa_with_custom_roles_example, default_flow_style=False), language="yaml")
+    
+    # Service Account with IAM Example (Legacy)
+    st.markdown("**Service Account with IAM Bindings (Legacy Method)**")
+    sa_with_iam_example = {
+        "project_id": "my-sa-iam-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [{
+                "account_id": "app-service-account",
+                "display_name": "Application Service Account",
+                "description": "Service account for application workloads"
+            }],
+            "iam": [{
+                "role": "roles/storage.objectViewer",
+                "members": ["serviceAccount:app-service-account@my-sa-iam-project.iam.gserviceaccount.com"]
+            }]
+        }
+    }
+    st.code(yaml.dump(sa_with_iam_example, default_flow_style=False), language="yaml")
+    
+    # Service Account with Key Management Example
+    st.markdown("**Service Account with Key Management**")
+    sa_with_keys_example = {
+        "project_id": "my-sa-keys-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [{
+                "account_id": "api-service-account",
+                "display_name": "API Service Account",
+                "description": "Service account for API authentication with key management",
+                "roles": [
+                    "roles/storage.objectViewer",
+                    "roles/logging.logWriter"
+                ],
+                "create_key": True,
+                "key_algorithm": "KEY_ALG_RSA_2048",
+                "public_key_type": "TYPE_X509_PEM_FILE",
+                "private_key_type": "TYPE_GOOGLE_CREDENTIALS_FILE",
+                "key_file_path": "/tmp/api-service-account-key.json"
+            }]
+        }
+    }
+    st.code(yaml.dump(sa_with_keys_example, default_flow_style=False), language="yaml")
+    
+    # Service Account with Different Key Types Example
+    st.markdown("**Service Account with Different Key Types**")
+    sa_different_keys_example = {
+        "project_id": "my-sa-different-keys-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "service_accounts": [
+                {
+                    "account_id": "pkcs12-service-account",
+                    "display_name": "PKCS12 Service Account",
+                    "description": "Service account with PKCS12 key format",
+                    "create_key": True,
+                    "key_algorithm": "KEY_ALG_RSA_2048",
+                    "public_key_type": "TYPE_X509_PEM_FILE",
+                    "private_key_type": "TYPE_PKCS12_FILE",
+                    "key_file_path": "/tmp/pkcs12-key.p12"
+                },
+                {
+                    "account_id": "raw-key-service-account",
+                    "display_name": "Raw Key Service Account",
+                    "description": "Service account with raw public key",
+                    "create_key": True,
+                    "key_algorithm": "KEY_ALG_RSA_1024",
+                    "public_key_type": "TYPE_RAW_PUBLIC_KEY",
+                    "private_key_type": "TYPE_GOOGLE_CREDENTIALS_FILE"
+                }
+            ]
+        }
+    }
+    st.code(yaml.dump(sa_different_keys_example, default_flow_style=False), language="yaml")
+    
+    # IAM Policy Examples
+    st.subheader("🔐 IAM Policy Configuration Examples")
+    
+    st.markdown("**Role Selection:** The Role dropdown includes common IAM roles like `roles/owner`, `roles/editor`, `roles/viewer`, service account roles, and service-specific roles. Select 'Custom Role' to enter a custom role name.")
+    
+    # IAM Member Example
+    st.markdown("**IAM Member (Non-authoritative)**")
+    iam_member_example = {
+        "project_id": "my-iam-member-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "iam": [{
+                "iam_type": "member",
+                "role": "roles/storage.objectViewer",
+                "member": "user:john@example.com"
+            }]
+        }
+    }
+    st.code(yaml.dump(iam_member_example, default_flow_style=False), language="yaml")
+    
+    # IAM Binding Example
+    st.markdown("**IAM Binding (Authoritative for role)**")
+    iam_example = {
+        "project_id": "my-iam-binding-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "iam": [{
+                "iam_type": "binding",
+                "role": "roles/editor",
+                "members": [
+                    "user:admin@example.com",
+                    "serviceAccount:app@project.iam.gserviceaccount.com",
+                    "group:developers@example.com"
+                ]
+            }]
+        }
+    }
+    st.code(yaml.dump(iam_example, default_flow_style=False), language="yaml")
+    
+    # IAM Policy Example
+    st.markdown("**IAM Policy (Authoritative - replaces entire policy)**")
+    iam_policy_example = {
+        "project_id": "my-iam-policy-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "iam": [{
+                "iam_type": "policy",
+                "policy_data": "{\"bindings\": [{\"role\": \"roles/editor\", \"members\": [\"user:admin@example.com\"]}, {\"role\": \"roles/viewer\", \"members\": [\"user:viewer@example.com\"]}]}"
+            }]
+        }
+    }
+    st.code(yaml.dump(iam_policy_example, default_flow_style=False), language="yaml")
+    
+    # IAM Audit Config Example
+    st.markdown("**IAM Audit Config (Audit logging)**")
+    iam_audit_example = {
+        "project_id": "my-iam-audit-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "iam": [{
+                "iam_type": "audit_config",
+                "service": "allServices",
+                "audit_log_configs": [
+                    {
+                        "log_type": "ADMIN_READ",
+                        "exempted_members": []
+                    },
+                    {
+                        "log_type": "DATA_READ",
+                        "exempted_members": ["user:admin@example.com"]
+                    }
+                ]
+            }]
+        }
+    }
+    st.code(yaml.dump(iam_audit_example, default_flow_style=False), language="yaml")
+    
+    # IAM with Conditions Example
+    st.markdown("**IAM with Conditions (Time-based access)**")
+    iam_conditions_example = {
+        "project_id": "my-iam-conditions-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "iam": [{
+                "iam_type": "member",
+                "role": "roles/compute.admin",
+                "member": "user:contractor@example.com",
+                "condition": {
+                    "title": "expires_after_2024",
+                    "expression": "request.time < timestamp(\"2024-12-31T23:59:59Z\")",
+                    "description": "Access expires at end of 2024"
+                }
+            }]
+        }
+    }
+    st.code(yaml.dump(iam_conditions_example, default_flow_style=False), language="yaml")
+    
+    # Multiple IAM Types Example
+    st.markdown("**Multiple IAM Types in One Project**")
+    iam_multiple_example = {
+        "project_id": "my-iam-multiple-project",
+        "billing_account": "01783B-A7A65B-153181",
+        "apis": ["iam.googleapis.com"],
+        "resources": {
+            "iam": [
+                {
+                    "iam_type": "member",
+                    "role": "roles/storage.objectViewer",
+                    "member": "user:readonly@example.com"
+                },
+                {
+                    "iam_type": "binding",
+                    "role": "roles/editor",
+                    "members": [
+                        "user:admin@example.com",
+                        "serviceAccount:app@project.iam.gserviceaccount.com"
+                    ]
+                },
+                {
+                    "iam_type": "audit_config",
+                    "service": "compute.googleapis.com",
+                    "audit_log_configs": [
+                        {
+                            "log_type": "ADMIN_READ",
+                            "exempted_members": []
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    st.code(yaml.dump(iam_multiple_example, default_flow_style=False), language="yaml")
     
     # Troubleshooting
     st.subheader("🔧 Troubleshooting")
