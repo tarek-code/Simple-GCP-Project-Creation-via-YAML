@@ -5,6 +5,7 @@ import subprocess
 import os
 import sys
 from pathlib import Path
+from typing import Any, Dict
 
 # Add the project root to Python path
 # Try different path resolution methods
@@ -35,6 +36,414 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+def generate_standalone_main_tf(config: dict, create_project: bool = True) -> str:
+    """Generate standalone main.tf content without external module dependencies"""
+    project_id = config.get("project_id", "")
+    billing_account = config.get("billing_account", "")
+    organization_id = config.get("organization_id")
+    labels = config.get("labels", {})
+    apis = config.get("apis", [])
+    resources = config.get("resources", {})
+    
+    content = '''terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "7.4.0"
+    }
+  }
+}
+
+provider "google" {
+  project = var.project_id
+}
+
+'''
+    
+    # Project resource (if creating project)
+    if create_project:
+        content += f'''resource "google_project" "project" {{
+  project_id      = var.project_id
+  name            = var.project_id
+  org_id          = var.organization_id
+  billing_account = var.billing_account
+  labels          = var.labels
+  deletion_policy = "DELETE"
+}}
+
+'''
+    
+    # Enable APIs
+    if apis:
+        content += '''# Enable APIs
+resource "google_project_service" "enabled_apis" {
+  for_each = toset(var.apis)
+  project  = var.project_id
+  service  = each.value
+}
+
+'''
+    
+    # Generate inline resources instead of modules
+    content += generate_inline_resources(resources)
+    
+    return content
+
+def generate_standalone_variables_tf(config: dict) -> str:
+    """Generate standalone variables.tf content"""
+    return '''variable "project_id" {
+  description = "The ID of the project"
+  type        = string
+}
+
+variable "organization_id" {
+  description = "Organization ID"
+  type        = string
+  default     = null
+}
+
+variable "billing_account" {
+  description = "Billing account ID"
+  type        = string
+}
+
+variable "labels" {
+  description = "Labels for the project"
+  type        = map(string)
+  default     = {}
+}
+
+variable "apis" {
+  description = "List of APIs to enable"
+  type        = list(string)
+  default     = []
+}
+
+variable "resources" {
+  description = "Ignored placeholder to silence warnings when tfvars contains 'resources'"
+  type        = any
+  default     = null
+}
+'''
+
+def generate_inline_resources(resources: dict) -> str:
+    """Generate inline resource blocks instead of module references"""
+    content = ""
+    
+    # VPC Networks
+    vpc_items = []
+    if "vpc" in resources:
+        if isinstance(resources["vpc"], list):
+            vpc_items.extend([v for v in resources["vpc"] if isinstance(v, dict)])
+        elif isinstance(resources["vpc"], dict):
+            vpc_items.append(resources["vpc"])
+    if isinstance(resources.get("vpcs"), list):
+        vpc_items.extend([v for v in resources["vpcs"] if isinstance(v, dict)])
+    
+    for i, vpc in enumerate(vpc_items, 1):
+        content += f'''resource "google_compute_network" "vpc_{i}" {{
+  name                    = "{vpc.get('name', f'vpc-{i}')}"
+  auto_create_subnetworks = {str(vpc.get('auto_create_subnetworks', False)).lower()}
+  routing_mode            = "{vpc.get('routing_mode', 'GLOBAL')}"
+  description             = "{vpc.get('description', 'VPC created via GUI')}"
+  mtu                     = {vpc.get('mtu', 1460)}
+}}
+'''
+    
+    # Subnets
+    for i, subnet in enumerate(resources.get("subnets", []), 1):
+        content += f'''resource "google_compute_subnetwork" "subnet_{i}" {{
+  name          = "{subnet.get('name', f'subnet-{i}')}"
+  region        = "{subnet.get('region', 'us-central1')}"
+  network       = google_compute_network.vpc_1.name
+  ip_cidr_range = "{subnet.get('ip_cidr_range', '10.0.{i}.0/24')}"
+  private_ip_google_access = {str(subnet.get('private_ip_google_access', True)).lower()}
+}}
+'''
+    
+    # Storage Buckets
+    for i, bucket in enumerate(resources.get("storage_buckets", []), 1):
+        content += f'''resource "google_storage_bucket" "bucket_{i}" {{
+  name          = "{bucket.get('name', f'bucket-{i}')}"
+  location      = "{bucket.get('location', 'US')}"
+  force_destroy = {str(bucket.get('force_destroy', False)).lower()}
+  
+  uniform_bucket_level_access = {str(bucket.get('uniform_bucket_level_access', True)).lower()}
+  
+  versioning {{
+    enabled = {str(bucket.get('enable_versioning', False)).lower()}
+  }}
+}}
+'''
+    
+    # Compute Instances (advanced rendering if fields provided)
+    for i, vm in enumerate(resources.get("compute_instances", []), 1):
+        # Prepare optional fields
+        desc = vm.get('description')
+        labels = vm.get('labels', {})
+        metadata = vm.get('metadata', {})
+        startup = vm.get('metadata_startup_script')
+        tags = vm.get('tags', [])
+        # Boot disk
+        b_size = vm.get('boot_disk_size_gb')
+        b_type = vm.get('boot_disk_type')
+        b_auto = vm.get('boot_disk_auto_delete', True)
+        b_labels = vm.get('boot_disk_labels', {})
+        # Network
+        net = vm.get('network')
+        sub = vm.get('subnetwork')
+        nip = vm.get('network_ip')
+        assign_eip = vm.get('assign_external_ip', vm.get('create_public_ip', False))
+        eip_tier = vm.get('external_network_tier')
+        # Scheduling
+        preempt = vm.get('scheduling_preemptible')
+        auto_restart = vm.get('scheduling_automatic_restart')
+        ohm = vm.get('scheduling_on_host_maintenance')
+        prov_model = vm.get('scheduling_provisioning_model')
+        # Shielded / Confidential / GPUs
+        enable_display = vm.get('enable_display')
+        enable_shielded = vm.get('enable_shielded_vm')
+        shielded_secure_boot = vm.get('shielded_secure_boot')
+        shielded_vtpm = vm.get('shielded_vtpm')
+        shielded_integrity = vm.get('shielded_integrity_monitoring')
+        enable_conf = vm.get('enable_confidential_compute')
+        conf_type = vm.get('confidential_instance_type')
+        gpus = vm.get('guest_accelerators', [])
+        # SA
+        sa_email = vm.get('service_account_email')
+        sa_scopes = vm.get('service_account_scopes', ["https://www.googleapis.com/auth/cloud-platform"]) or []
+        # Misc
+        allow_stop = vm.get('allow_stopping_for_update', True)
+        can_ip_forward = vm.get('can_ip_forward', False)
+        del_prot = vm.get('deletion_protection', False)
+        hostname = vm.get('hostname')
+        min_cpu = vm.get('min_cpu_platform')
+
+        # Build HCL
+        content += f'''resource "google_compute_instance" "vm_{i}" {{
+  name         = "{vm.get('name', f'vm-{i}')}"
+  zone         = "{vm.get('zone', 'us-central1-a')}"
+  machine_type = "{vm.get('machine_type', 'e2-micro')}"
+'''
+        if desc is not None:
+            content += f"  description  = {json.dumps(desc)}\n"
+        if tags:
+            content += f"  tags         = {json.dumps(tags)}\n"
+        if labels:
+            content += f"  labels       = {json.dumps(labels)}\n"
+        if metadata:
+            content += f"  metadata     = {json.dumps(metadata)}\n"
+        if startup is not None:
+            content += f"  metadata_startup_script = {json.dumps(startup)}\n"
+        if enable_display is not None:
+            content += f"  enable_display = {str(bool(enable_display)).lower()}\n"
+        if can_ip_forward is not None:
+            content += f"  can_ip_forward = {str(bool(can_ip_forward)).lower()}\n"
+        if del_prot is not None:
+            content += f"  deletion_protection = {str(bool(del_prot)).lower()}\n"
+        if hostname is not None:
+            content += f"  hostname = {json.dumps(hostname)}\n"
+        if min_cpu is not None:
+            content += f"  min_cpu_platform = {json.dumps(min_cpu)}\n"
+        if allow_stop is not None:
+            content += f"  allow_stopping_for_update = {str(bool(allow_stop)).lower()}\n"
+
+        # Boot disk
+        content += "\n  boot_disk {\n"
+        if b_auto is not None:
+            content += f"    auto_delete = {str(bool(b_auto)).lower()}\n"
+        content += "    initialize_params {\n"
+        content += f"      image = \"{vm.get('image', 'debian-cloud/debian-11')}\"\n"
+        if b_labels:
+            content += f"      labels = {json.dumps(b_labels)}\n"
+        if b_type is not None:
+            content += f"      type  = {json.dumps(b_type)}\n"
+        if b_size is not None:
+            content += f"      size  = {int(b_size)}\n"
+        content += "    }\n  }\n\n"
+
+        # Network interface
+        content += "  network_interface {\n"
+        if net is not None:
+            content += f"    network = {json.dumps(net)}\n"
+        elif 'vpc_1' in 'vpc_1':
+            # Fallback to first network example reference if not provided
+            content += "    network = google_compute_network.vpc_1.name\n"
+        if sub is not None:
+            content += f"    subnetwork = {json.dumps(sub)}\n"
+        if nip is not None:
+            content += f"    network_ip = {json.dumps(nip)}\n"
+        if assign_eip:
+            content += "    access_config {\n"
+            if eip_tier is not None:
+                content += f"      network_tier = {json.dumps(eip_tier)}\n"
+            content += "    }\n"
+        content += "  }\n\n"
+
+        # Guest accelerators
+        if gpus:
+            for ga in gpus:
+                t = ga.get('type'); c = ga.get('count')
+                if t and c:
+                    content += f"  guest_accelerator {{\n    type = \"{t}\"\n    count = {int(c)}\n  }}\n\n"
+
+        # Shielded VM
+        if enable_shielded:
+            content += "  shielded_instance_config {\n"
+            content += f"    enable_secure_boot = {str(bool(shielded_secure_boot)).lower()}\n"
+            content += f"    enable_vtpm = {str(bool(shielded_vtpm if shielded_vtpm is not None else True)).lower()}\n"
+            content += f"    enable_integrity_monitoring = {str(bool(shielded_integrity if shielded_integrity is not None else True)).lower()}\n"
+            content += "  }\n\n"
+
+        # Confidential compute
+        if enable_conf:
+            content += "  confidential_instance_config {\n"
+            content += "    enable_confidential_compute = true\n"
+            if conf_type:
+                content += f"    confidential_instance_type = {json.dumps(conf_type)}\n"
+            content += "  }\n\n"
+
+        # Service account
+        if sa_email:
+            content += "  service_account {\n"
+            content += f"    email  = {json.dumps(sa_email)}\n"
+            content += f"    scopes = {json.dumps(sa_scopes)}\n"
+            content += "  }\n\n"
+
+        # Scheduling
+        if any(v is not None for v in [preempt, auto_restart, ohm, prov_model]):
+            content += "  scheduling {\n"
+            if preempt is not None:
+                content += f"    preemptible = {str(bool(preempt)).lower()}\n"
+            if auto_restart is not None:
+                content += f"    automatic_restart = {str(bool(auto_restart)).lower()}\n"
+            if ohm is not None:
+                content += f"    on_host_maintenance = {json.dumps(ohm)}\n"
+            if prov_model is not None:
+                content += f"    provisioning_model = {json.dumps(prov_model)}\n"
+            content += "  }\n\n"
+
+        content += "}\n\n"
+    
+    # Service Accounts
+    for i, sa in enumerate(resources.get("service_accounts", []), 1):
+        content += f'''resource "google_service_account" "sa_{i}" {{
+  account_id   = "{sa.get('account_id', f'sa-{i}')}"
+  display_name = "{sa.get('display_name', f'Service Account {i}')}"
+  description  = "{sa.get('description', 'Service account created via GUI')}"
+}}
+'''
+    
+    # Firewall Rules
+    for i, fw in enumerate(resources.get("firewall_rules", []), 1):
+        source_ranges = fw.get('source_ranges', ['0.0.0.0/0']) or []
+        ports = fw.get('ports', ['22']) or []
+        # Render lists as valid HCL with double-quoted strings
+        ports_hcl = f"[{', '.join([f'\"{str(p)}\"' for p in ports])}]" if ports else "[]"
+        source_ranges_hcl = f"[{', '.join([f'\"{str(r)}\"' for r in source_ranges])}]" if source_ranges else "[]"
+        content += f'''resource "google_compute_firewall" "firewall_{i}" {{
+  name    = "{fw.get('name', f'firewall-{i}')}"
+  network = google_compute_network.vpc_1.name
+  
+  allow {{
+    protocol = "{fw.get('protocol', 'tcp')}"
+    ports    = {ports_hcl}
+  }}
+  
+  source_ranges = {source_ranges_hcl}
+  direction     = "{fw.get('direction', 'INGRESS')}"
+}}
+'''
+    
+    # Cloud Run Services
+    for i, cr in enumerate(resources.get("cloud_run_services", []), 1):
+        content += f'''resource "google_cloud_run_service" "run_{i}" {{
+  name     = "{cr.get('name', f'run-{i}')}"
+  location = "{cr.get('location', 'us-central1')}"
+  
+  template {{
+    spec {{
+      containers {{
+        image = "{cr.get('image', 'gcr.io/cloudrun/hello')}"
+      }}
+    }}
+  }}
+  
+  traffic {{
+    percent         = 100
+    latest_revision = true
+  }}
+}}
+'''
+    
+    # Cloud SQL Instances
+    for i, sql in enumerate(resources.get("cloud_sql_instances", []), 1):
+        content += f'''resource "google_sql_database_instance" "sql_{i}" {{
+  name             = "{sql.get('name', f'sql-{i}')}"
+  database_version = "{sql.get('database_version', 'POSTGRES_14')}"
+  region           = "{sql.get('region', 'us-central1')}"
+  
+  settings {{
+    tier = "{sql.get('tier', 'db-f1-micro')}"
+  }}
+  
+  deletion_protection = {str(sql.get('deletion_protection', False)).lower()}
+}}
+'''
+    
+    # Pub/Sub Topics
+    for i, topic in enumerate(resources.get("pubsub_topics", []), 1):
+        content += f'''resource "google_pubsub_topic" "topic_{i}" {{
+  name = "{topic.get('name', f'topic-{i}')}"
+}}
+'''
+    
+    # Secret Manager Secrets
+    for i, secret in enumerate(resources.get("secrets", []), 1):
+        content += f'''resource "google_secret_manager_secret" "secret_{i}" {{
+  secret_id = "{secret.get('name', f'secret-{i}')}"
+  
+  replication {{
+    auto {{
+    }}
+  }}
+}}
+
+resource "google_secret_manager_secret_version" "secret_version_{i}" {{
+  secret = google_secret_manager_secret.secret_{i}.id
+  secret_data = "{secret.get('value', 'dummy-value')}"
+}}
+'''
+    
+    # BigQuery Datasets
+    for i, dataset in enumerate(resources.get("bigquery_datasets", []), 1):
+        content += f'''resource "google_bigquery_dataset" "dataset_{i}" {{
+  dataset_id = "{dataset.get('dataset_id', f'dataset-{i}')}"
+  location   = "{dataset.get('location', 'US')}"
+}}
+'''
+    
+    # Artifact Registry
+    for i, repo in enumerate(resources.get("artifact_repos", []), 1):
+        content += f'''resource "google_artifact_registry_repository" "repo_{i}" {{
+  location      = "{repo.get('location', 'us')}"
+  repository_id = "{repo.get('name', f'repo-{i}')}"
+  description   = "{repo.get('description', 'Repository created via GUI')}"
+  format        = "{repo.get('format', 'DOCKER')}"
+}}
+'''
+    
+    # DNS Zones
+    for i, zone in enumerate(resources.get("dns_zones", []), 1):
+        content += f'''resource "google_dns_managed_zone" "zone_{i}" {{
+  name        = "{zone.get('name', f'zone-{i}')}"
+  dns_name    = "{zone.get('dns_name', 'example.com.')}"
+  description = "{zone.get('description', 'DNS zone created via GUI')}"
+}}
+'''
+    
+    return content
+
 def main():
     st.title("☁️ GCP Project Creator")
     st.markdown("Create and deploy Google Cloud Platform projects with a simple GUI interface")
@@ -63,6 +472,82 @@ def main():
 def project_builder():
     st.header("🏗️ Project Builder")
     st.markdown("Configure your GCP project step by step")
+    # Ensure series catalog helper is available before any popup rendering
+    def gp_series_catalog() -> Dict[str, Dict[str, Dict[str, list]]]:
+        return {
+            "C3D": {
+                "Standard": {
+                    "presets": [
+                        "c3d-standard-4","c3d-standard-8","c3d-standard-16","c3d-standard-30",
+                        "c3d-standard-60","c3d-standard-90","c3d-standard-180","c3d-standard-360",
+                        "c3d-standard-8-lssd","c3d-standard-16-lssd","c3d-standard-30-lssd",
+                        "c3d-standard-60-lssd","c3d-standard-90-lssd","c3d-standard-180-lssd","c3d-standard-360-lssd"
+                    ]
+                },
+                "High memory": {
+                    "presets": [
+                        "c3d-highmem-4","c3d-highmem-8","c3d-highmem-16","c3d-highmem-30",
+                        "c3d-highmem-60","c3d-highmem-90","c3d-highmem-180","c3d-highmem-360",
+                        "c3d-highmem-8-lssd","c3d-highmem-16-lssd","c3d-highmem-30-lssd",
+                        "c3d-highmem-60-lssd","c3d-highmem-90-lssd","c3d-highmem-180-lssd","c3d-highmem-360-lssd"
+                    ]
+                },
+                "High CPU": {
+                    "presets": [
+                        "c3d-highcpu-4","c3d-highcpu-8","c3d-highcpu-16","c3d-highcpu-30",
+                        "c3d-highcpu-60","c3d-highcpu-90","c3d-highcpu-180","c3d-highcpu-360"
+                    ]
+                }
+            },
+            "E2": {
+                "Standard": {"presets": ["e2-micro","e2-small","e2-medium","e2-standard-2","e2-standard-4","e2-standard-8","e2-standard-16","e2-standard-32"]},
+                "High memory": {"presets": ["e2-highmem-2","e2-highmem-4","e2-highmem-8","e2-highmem-16"]},
+                "High CPU": {"presets": ["e2-highcpu-2","e2-highcpu-4","e2-highcpu-8","e2-highcpu-16","e2-highcpu-32"]},
+                "Shared-core": {"presets": ["e2-medium","e2-micro","e2-small"]},
+            },
+            "N2": {
+                "Standard": {"presets": ["n2-standard-2","n2-standard-4","n2-standard-8","n2-standard-16","n2-standard-32"]}
+            },
+            "N2D": {
+                "Standard": {"presets": ["n2d-standard-2","n2d-standard-4","n2d-standard-8","n2d-standard-16","n2d-standard-32"]}
+            },
+            "N1": {
+                "Standard": {"presets": ["n1-standard-1","n1-standard-2","n1-standard-4","n1-standard-8","n1-standard-16"]}
+            }
+        }
+
+    # Basic vCPU/memory inference helper available early for popup
+    def infer_vcpu_and_memory(machine_type: str) -> tuple[float, float]:
+        mt = (machine_type or "").lower()
+        presets = {
+            "e2-micro": (0.25, 1),
+            "e2-small": (0.5, 2),
+            "e2-medium": (2, 4),
+            "e2-standard-2": (2, 8),
+            "e2-standard-4": (4, 16),
+            "e2-standard-8": (8, 32),
+            "e2-standard-16": (16, 64),
+            "e2-standard-32": (32, 128),
+            "e2-highmem-2": (2, 16),
+            "e2-highmem-4": (4, 32),
+            "e2-highmem-8": (8, 64),
+            "e2-highmem-16": (16, 128),
+            "e2-highcpu-2": (2, 2),
+            "e2-highcpu-4": (4, 4),
+            "e2-highcpu-8": (8, 8),
+            "e2-highcpu-16": (16, 16),
+            "e2-highcpu-32": (32, 32),
+        }
+        if mt in presets:
+            return presets[mt]
+        # Heuristic fallback: extract trailing number as vCPU, 4GB per vCPU
+        import re
+        m = re.search(r"-(\d+)$", mt)
+        if m:
+            v = float(m.group(1))
+            return (v, v * 4.0)
+        return (2.0, 8.0)
+    # No popup - machine type selection is inline in Advanced VM Options
     
     # Project Settings
     st.subheader("📋 Project Settings")
@@ -1318,56 +1803,466 @@ def project_builder():
         st.markdown("**VM Configuration**")
         if 'compute_instances' not in st.session_state:
             st.session_state.compute_instances = []
-        
-        # Display existing instances with inline editing
+
+        # ---- Pricing helpers (approximate) ----
+        def infer_vcpu_and_memory(machine_type: str) -> tuple[float, float]:
+            mt = (machine_type or "").lower()
+            # Known presets
+            presets = {
+                "e2-micro": (0.25, 1),
+                "e2-small": (0.5, 2),
+                "e2-medium": (2, 4),
+                "e2-standard-2": (2, 8),
+                "e2-standard-4": (4, 16),
+                "n2-standard-2": (2, 8),
+                "n2-standard-4": (4, 16),
+            }
+            if mt in presets:
+                return presets[mt]
+            # Heuristic: standard-N => vcpu=N, mem=4GB per vCPU
+            import re
+            m = re.search(r"-(\d+)$", mt)
+            if m:
+                vcpu = float(m.group(1))
+                mem = vcpu * 4.0
+                return (vcpu, mem)
+            # Fallback
+            return (2.0, 8.0)
+
+        def estimate_vm_cost_monthly(vm: dict) -> dict:
+            # Approximate hourly pricing model (us-central1):
+            # hourly_compute = vcpu*0.03 + mem_gb*0.005
+            vcpu, mem_gb = infer_vcpu_and_memory(vm.get('machine_type', 'e2-standard-2'))
+            hourly_compute = vcpu * 0.03 + mem_gb * 0.005
+            # Disk pricing (balanced): $0.10 per GB-month; SSD: $0.17; standard: $0.04
+            size_gb = (vm.get('boot_disk_size_gb') or 10)
+            dtype = (vm.get('boot_disk_type') or 'pd-balanced').lower()
+            per_gb_month = 0.10 if 'balanced' in dtype else (0.17 if 'ssd' in dtype else 0.04)
+            disk_month = size_gb * per_gb_month
+            monthly_compute = hourly_compute * 730.0
+            total = monthly_compute + disk_month
+            return {
+                "vcpu": vcpu,
+                "mem_gb": mem_gb,
+                "hourly_compute": hourly_compute,
+                "monthly_compute": monthly_compute,
+                "disk_month": disk_month,
+                "total": total,
+            }
+
+        # ---- Machine type presets (General purpose) ----
+        def gp_series_catalog() -> Dict[str, Dict[str, Dict[str, list]]]:
+            """Return General purpose series with profiles and machine presets."""
+            return {
+                "C3D": {
+                    "Standard": {
+                        "presets": [
+                            "c3d-standard-4","c3d-standard-8","c3d-standard-16","c3d-standard-30",
+                            "c3d-standard-60","c3d-standard-90","c3d-standard-180","c3d-standard-360",
+                            "c3d-standard-8-lssd","c3d-standard-16-lssd","c3d-standard-30-lssd",
+                            "c3d-standard-60-lssd","c3d-standard-90-lssd","c3d-standard-180-lssd","c3d-standard-360-lssd"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "c3d-highmem-4","c3d-highmem-8","c3d-highmem-16","c3d-highmem-30",
+                            "c3d-highmem-60","c3d-highmem-90","c3d-highmem-180","c3d-highmem-360",
+                            "c3d-highmem-8-lssd","c3d-highmem-16-lssd","c3d-highmem-30-lssd",
+                            "c3d-highmem-60-lssd","c3d-highmem-90-lssd","c3d-highmem-180-lssd","c3d-highmem-360-lssd"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "c3d-highcpu-4","c3d-highcpu-8","c3d-highcpu-16","c3d-highcpu-30",
+                            "c3d-highcpu-60","c3d-highcpu-90","c3d-highcpu-180","c3d-highcpu-360"
+                        ]
+                    }
+                },
+                "E2": {
+                    "Standard": {"presets": ["e2-micro","e2-small","e2-medium","e2-standard-2","e2-standard-4","e2-standard-8","e2-standard-16"]}
+                },
+                "N2": {
+                    "Standard": {"presets": ["n2-standard-2","n2-standard-4","n2-standard-8","n2-standard-16","n2-standard-32"]}
+                },
+                "N2D": {
+                    "Standard": {"presets": ["n2d-standard-2","n2d-standard-4","n2d-standard-8","n2d-standard-16","n2d-standard-32"]}
+                },
+                "N1": {
+                    "Standard": {"presets": ["n1-standard-1","n1-standard-2","n1-standard-4","n1-standard-8","n1-standard-16"]}
+                }
+            }
+
+        # Display existing instances with inline editing and advanced options
         if st.session_state.compute_instances:
             st.markdown("**Current Compute Instances:**")
             for i, vm in enumerate(list(st.session_state.compute_instances)):
-                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+                # Region/Zone helpers
+                regions = ["us-central1", "us-west1", "europe-west1", "asia-south1"]
+                region_to_zones = {
+                    "us-central1": ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"],
+                    "us-west1": ["us-west1-a", "us-west1-b", "us-west1-c"],
+                    "europe-west1": ["europe-west1-b", "europe-west1-c", "europe-west1-d"],
+                    "asia-south1": ["asia-south1-a", "asia-south1-b", "asia-south1-c"],
+                }
+
+                col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
                 with col1:
-                    new_name = st.text_input("Name", value=vm['name'], key=f"vm_name_{i}")
+                    new_name = st.text_input("Name", value=vm.get('name', ''), key=f"vm_name_{i}")
                 with col2:
-                    new_zone = st.selectbox("Zone", ["us-central1-a", "us-west1-a", "europe-west1-a"], 
-                                          index=["us-central1-a", "us-west1-a", "europe-west1-a"].index(vm['zone']),
-                                          key=f"vm_zone_{i}")
+                    # Region selection; default inferred from zone prefix
+                    current_zone = vm.get('zone', 'us-central1-a')
+                    inferred_region = vm.get('region') or current_zone.rsplit('-', 1)[0]
+                    r_val = inferred_region if inferred_region in regions else regions[0]
+                    r_idx = regions.index(r_val)
+                    new_region = st.selectbox("Region", regions, index=r_idx, key=f"vm_region_{i}")
                 with col3:
-                    new_type = st.selectbox("Type", ["e2-micro", "e2-small", "e2-medium"], 
-                                          index=["e2-micro", "e2-small", "e2-medium"].index(vm['machine_type']),
-                                          key=f"vm_type_{i}")
+                    # Zone options based on region
+                    zones_list = region_to_zones.get(new_region, region_to_zones[regions[0]])
+                    z_val = current_zone if current_zone in zones_list else zones_list[0]
+                    z_idx = zones_list.index(z_val)
+                    new_zone = st.selectbox("Zone", zones_list, index=z_idx, key=f"vm_zone_{i}")
                 with col4:
+                    # Machine type selection lives in Advanced VM Options below
+                    new_type = vm.get('machine_type', '')
+                    st.markdown(f"**Machine type**: `{new_type or 'not set'}`")
+                    if st.button("Change machine type", key=f"vm_change_type_{i}"):
+                        st.session_state[f"open_vm_adv_{i}"] = True
+                        st.rerun()
+                with col5:
                     if st.button("🗑️", key=f"del_vm_{i}"):
                         st.session_state.compute_instances.pop(i)
                         st.rerun()
-                
-                # Update if changed
-                if (new_name != vm['name'] or new_zone != vm['zone'] or 
-                    new_type != vm['machine_type']):
+
+                with st.expander("🔧 Advanced VM Options", expanded=st.session_state.get(f"open_vm_adv_{i}", False)):
+                    # Inline Machine Type Selection (fallback if popup not used)
+                    st.markdown("**Machine Type Selection**")
+                    tabs = st.tabs(["General purpose", "Compute optimized", "Memory optimized", "Storage optimized", "GPUs"])
+                    with tabs[0]:
+                        catalog = gp_series_catalog()
+                        series = list(catalog.keys())
+                        sel_series = st.selectbox("Series", series, index=series.index('E2') if 'E2' in series else 0, key=f"vm_series_{i}")
+                        # Preset/Custom
+                        sub_tabs = st.tabs(["Preset", "Custom"])
+                        with sub_tabs[0]:
+                            families = ["Shared-core", "Standard", "High memory", "High CPU"]
+                            fam = st.radio("instance sizes", families, horizontal=True, key=f"vm_e2_family_{i}")
+                            e2_family_map = {
+                                "Shared-core": [("e2-medium", "1-2 vCPU (1 shared core), 4 GB memory"),("e2-micro", "0.25-2 vCPU (1 shared core), 1 GB memory"),("e2-small", "0.5-2 vCPU (1 shared core), 2 GB memory")],
+                                "Standard": [("e2-standard-2","2 vCPU (1 core), 8 GB memory"),("e2-standard-4","4 vCPU (2 core), 16 GB memory"),("e2-standard-8","8 vCPU (4 core), 32 GB memory"),("e2-standard-16","16 vCPU (8 core), 64 GB memory"),("e2-standard-32","32 vCPU (16 core), 128 GB memory")],
+                                "High memory": [("e2-highmem-2","2 vCPU (1 core), 16 GB memory"),("e2-highmem-4","4 vCPU (2 core), 32 GB memory"),("e2-highmem-8","8 vCPU (4 core), 64 GB memory"),("e2-highmem-16","16 vCPU (8 core), 128 GB memory")],
+                                "High CPU": [("e2-highcpu-2","2 vCPU (1 core), 2 GB memory"),("e2-highcpu-4","4 vCPU (2 core), 4 GB memory"),("e2-highcpu-8","8 vCPU (4 core), 8 GB memory"),("e2-highcpu-16","16 vCPU (8 core), 16 GB memory"),("e2-highcpu-32","32 vCPU (16 core), 32 GB memory")],
+                            }
+                            opts = [f"{name} – {desc}" for name, desc in e2_family_map[fam]]
+                            sel_opt = st.selectbox("", opts, index=0, label_visibility="collapsed", key=f"vm_e2_opt_{i}")
+                            chosen_mt = e2_family_map[fam][opts.index(sel_opt)][0]
+                            if chosen_mt != st.session_state.compute_instances[i].get('machine_type'):
+                                st.session_state.compute_instances[i]['machine_type'] = chosen_mt
+                                st.rerun()
+                        with sub_tabs[1]:
+                            st.info("Custom machine type coming next (manual vCPU & memory sliders).")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        new_image = st.text_input("Boot Image", value=vm.get('image', 'debian-cloud/debian-11'), key=f"vm_image_{i}")
+                        new_description = st.text_input("Description", value=vm.get('description', ''), key=f"vm_desc_{i}")
+                        new_hostname = st.text_input("Hostname (FQDN)", value=vm.get('hostname', ''), key=f"vm_host_{i}")
+                        new_min_cpu = st.text_input("Min CPU Platform", value=vm.get('min_cpu_platform', ''), key=f"vm_min_cpu_{i}")
+                    with c2:
+                        new_network = st.text_input("Network (name/self_link)", value=vm.get('network', ''), key=f"vm_net_{i}")
+                        new_subnet = st.text_input("Subnetwork (name/self_link)", value=vm.get('subnetwork', ''), key=f"vm_sub_{i}")
+                        new_network_ip = st.text_input("Primary Internal IP", value=vm.get('network_ip', ''), key=f"vm_nip_{i}")
+                        new_ext_tier = st.selectbox("External IP Tier", ["", "PREMIUM", "STANDARD"], index=["", "PREMIUM", "STANDARD"].index(vm.get('external_network_tier', "") or ""), key=f"vm_eip_tier_{i}")
+                    with c3:
+                        new_assign_eip = st.checkbox("Assign External IPv4", value=vm.get('assign_external_ip', vm.get('create_public_ip', False)), key=f"vm_eip_{i}")
+                        new_allow_stop = st.checkbox("Allow Stop for Update", value=vm.get('allow_stopping_for_update', True), key=f"vm_allow_stop_{i}")
+                        new_can_ip_forward = st.checkbox("Can IP Forward", value=vm.get('can_ip_forward', False), key=f"vm_ipf_{i}")
+                        new_del_prot = st.checkbox("Deletion Protection", value=vm.get('deletion_protection', False), key=f"vm_delprot_{i}")
+                        new_enable_display = st.checkbox("Enable Display Device", value=vm.get('enable_display', False), key=f"vm_display_{i}")
+
+                    c4, c5, c6 = st.columns(3)
+                    with c4:
+                        new_boot_size = st.number_input("Boot Disk Size (GB)", min_value=10, value=int(vm.get('boot_disk_size_gb') or 10), key=f"vm_bsize_{i}")
+                        new_boot_type = st.selectbox("Boot Disk Type", ["", "pd-standard", "pd-balanced", "pd-ssd"], index=["", "pd-standard", "pd-balanced", "pd-ssd"].index(vm.get('boot_disk_type', "") or ""), key=f"vm_btype_{i}")
+                        new_boot_auto = st.checkbox("Boot Disk Auto Delete", value=vm.get('boot_disk_auto_delete', True), key=f"vm_bauto_{i}")
+                    with c5:
+                        new_sa_email = st.text_input("Service Account Email", value=vm.get('service_account_email', ''), key=f"vm_sa_{i}")
+                        new_sa_scopes = st.text_area("Service Account Scopes (comma-separated)", value=", ".join(vm.get('service_account_scopes', ["https://www.googleapis.com/auth/cloud-platform"])) , key=f"vm_scopes_{i}")
+                        new_tags = st.text_input("Tags (comma-separated)", value=", ".join(vm.get('tags', [])), key=f"vm_tags_{i}")
+                    with c6:
+                        new_preempt = st.checkbox("Preemptible / Spot", value=vm.get('scheduling_preemptible', False), key=f"vm_preempt_{i}")
+                        new_auto_restart = st.checkbox("Automatic Restart", value=vm.get('scheduling_automatic_restart', True), key=f"vm_autorst_{i}")
+                        new_ohm = st.selectbox("On Host Maintenance", ["", "MIGRATE", "TERMINATE"], index=["", "MIGRATE", "TERMINATE"].index(vm.get('scheduling_on_host_maintenance', "") or ""), key=f"vm_ohm_{i}")
+                        new_prov_model = st.selectbox("Provisioning Model", ["", "STANDARD", "SPOT"], index=["", "STANDARD", "SPOT"].index(vm.get('scheduling_provisioning_model', "") or ""), key=f"vm_prov_{i}")
+
+                    c7, c8 = st.columns(2)
+                    with c7:
+                        new_enable_shielded = st.checkbox("Enable Shielded VM", value=vm.get('enable_shielded_vm', False), key=f"vm_shielded_{i}")
+                        new_sh_secure = st.checkbox("Shielded Secure Boot", value=vm.get('shielded_secure_boot', False), key=f"vm_shs_{i}")
+                        new_sh_vtpm = st.checkbox("Shielded vTPM", value=vm.get('shielded_vtpm', True), key=f"vm_shv_{i}")
+                        new_sh_integrity = st.checkbox("Shielded Integrity Monitoring", value=vm.get('shielded_integrity_monitoring', True), key=f"vm_shi_{i}")
+                    with c8:
+                        new_enable_conf = st.checkbox("Enable Confidential Compute", value=vm.get('enable_confidential_compute', False), key=f"vm_conf_{i}")
+                        new_conf_type = st.selectbox("Confidential Type", ["", "SEV", "SEV_SNP", "TDX"], index=["", "SEV", "SEV_SNP", "TDX"].index(vm.get('confidential_instance_type', "") or ""), key=f"vm_conf_type_{i}")
+
+                    # JSON-like inputs
+                    adv1, adv2, adv3 = st.columns(3)
+                    with adv1:
+                        new_labels_str = st.text_area("Labels (JSON)", value=json.dumps(vm.get('labels', {}), indent=2), key=f"vm_labels_{i}")
+                    with adv2:
+                        new_metadata_str = st.text_area("Metadata (JSON)", value=json.dumps(vm.get('metadata', {}), indent=2), key=f"vm_meta_{i}")
+                    with adv3:
+                        new_boot_labels_str = st.text_area("Boot Disk Labels (JSON)", value=json.dumps(vm.get('boot_disk_labels', {}), indent=2), key=f"vm_blabels_{i}")
+
+                    # Startup script
+                    new_startup = st.text_area("Startup Script", value=vm.get('metadata_startup_script', ''), key=f"vm_startup_{i}")
+
+                    # Guest accelerators as JSON list
+                    new_gpus_str = st.text_area("Guest Accelerators (JSON list)", value=json.dumps(vm.get('guest_accelerators', []), indent=2), key=f"vm_gpus_{i}")
+
+                    # Parse and save advanced fields back
+                    def parse_json_or(default_val, s):
+                        try:
+                            return json.loads(s) if s else default_val
+                        except Exception:
+                            return default_val
+
+                    st.session_state.compute_instances[i]['image'] = new_image
+                    st.session_state.compute_instances[i]['description'] = new_description or None
+                    st.session_state.compute_instances[i]['hostname'] = new_hostname or None
+                    st.session_state.compute_instances[i]['min_cpu_platform'] = new_min_cpu or None
+                    st.session_state.compute_instances[i]['network'] = new_network or None
+                    st.session_state.compute_instances[i]['subnetwork'] = new_subnet or None
+                    st.session_state.compute_instances[i]['network_ip'] = new_network_ip or None
+                    st.session_state.compute_instances[i]['external_network_tier'] = new_ext_tier or None
+                    st.session_state.compute_instances[i]['assign_external_ip'] = bool(new_assign_eip)
+                    st.session_state.compute_instances[i]['allow_stopping_for_update'] = bool(new_allow_stop)
+                    st.session_state.compute_instances[i]['can_ip_forward'] = bool(new_can_ip_forward)
+                    st.session_state.compute_instances[i]['deletion_protection'] = bool(new_del_prot)
+                    st.session_state.compute_instances[i]['enable_display'] = bool(new_enable_display)
+                    st.session_state.compute_instances[i]['boot_disk_size_gb'] = int(new_boot_size) if new_boot_size else None
+                    st.session_state.compute_instances[i]['boot_disk_type'] = new_boot_type or None
+                    st.session_state.compute_instances[i]['boot_disk_auto_delete'] = bool(new_boot_auto)
+                    st.session_state.compute_instances[i]['service_account_email'] = new_sa_email or None
+                    st.session_state.compute_instances[i]['service_account_scopes'] = [s.strip() for s in (new_sa_scopes or '').split(',') if s.strip()] or ["https://www.googleapis.com/auth/cloud-platform"]
+                    st.session_state.compute_instances[i]['tags'] = [t.strip() for t in (new_tags or '').split(',') if t.strip()]
+                    st.session_state.compute_instances[i]['scheduling_preemptible'] = bool(new_preempt)
+                    st.session_state.compute_instances[i]['scheduling_automatic_restart'] = bool(new_auto_restart)
+                    st.session_state.compute_instances[i]['scheduling_on_host_maintenance'] = new_ohm or None
+                    st.session_state.compute_instances[i]['scheduling_provisioning_model'] = new_prov_model or None
+                    st.session_state.compute_instances[i]['enable_shielded_vm'] = bool(new_enable_shielded)
+                    st.session_state.compute_instances[i]['shielded_secure_boot'] = bool(new_sh_secure)
+                    st.session_state.compute_instances[i]['shielded_vtpm'] = bool(new_sh_vtpm)
+                    st.session_state.compute_instances[i]['shielded_integrity_monitoring'] = bool(new_sh_integrity)
+                    st.session_state.compute_instances[i]['enable_confidential_compute'] = bool(new_enable_conf)
+                    st.session_state.compute_instances[i]['confidential_instance_type'] = new_conf_type or None
+                    st.session_state.compute_instances[i]['labels'] = parse_json_or({}, new_labels_str)
+                    st.session_state.compute_instances[i]['metadata'] = parse_json_or({}, new_metadata_str)
+                    st.session_state.compute_instances[i]['boot_disk_labels'] = parse_json_or({}, new_boot_labels_str)
+                    st.session_state.compute_instances[i]['metadata_startup_script'] = new_startup or None
+                    st.session_state.compute_instances[i]['guest_accelerators'] = parse_json_or([], new_gpus_str)
+
+                    # Cost estimate (live)
+                    estimate = estimate_vm_cost_monthly(st.session_state.compute_instances[i])
+                    st.markdown("**Monthly estimate**")
+                    st.markdown(f"${estimate['total']:.2f}")
+                    st.caption(f"That's about ${estimate['hourly_compute']:.2f} hourly (compute only)")
+                    with st.expander("View breakdown", expanded=False):
+                        st.markdown("Item | Monthly estimate")
+                        st.markdown("--- | ---")
+                        st.markdown(f"{int(estimate['vcpu']) if estimate['vcpu'].is_integer() else estimate['vcpu']} vCPU + {int(estimate['mem_gb']) if estimate['mem_gb'].is_integer() else estimate['mem_gb']} GB memory | ${estimate['monthly_compute']:.2f}")
+                        st.markdown(f"{int(st.session_state.compute_instances[i].get('boot_disk_size_gb') or 10)} GB {st.session_state.compute_instances[i].get('boot_disk_type') or 'pd-balanced'} persistent disk | ${estimate['disk_month']:.2f}")
+                        st.markdown("Logging | Cost varies")
+                        st.markdown("Monitoring | Cost varies")
+                        st.markdown("Snapshot schedule | Cost varies")
+
+                # Basic fields update
+                if (new_name != vm.get('name') or new_zone != vm.get('zone') or new_type != vm.get('machine_type') or new_region != vm.get('region')):
                     st.session_state.compute_instances[i]['name'] = new_name
+                    st.session_state.compute_instances[i]['region'] = new_region
                     st.session_state.compute_instances[i]['zone'] = new_zone
                     st.session_state.compute_instances[i]['machine_type'] = new_type
-        
+
         # Add new instance
         st.markdown("**Add New Compute Instance:**")
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+        # Region/Zone for new instances
+        regions = ["us-central1", "us-west1", "europe-west1", "asia-south1"]
+        region_to_zones = {
+            "us-central1": ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"],
+            "us-west1": ["us-west1-a", "us-west1-b", "us-west1-c"],
+            "europe-west1": ["europe-west1-b", "europe-west1-c", "europe-west1-d"],
+            "asia-south1": ["asia-south1-a", "asia-south1-b", "asia-south1-c"],
+        }
+
+        col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
         with col1:
             vm_name = st.text_input("VM Name", value="my-vm", key="new_vm_name")
         with col2:
-            vm_zone = st.selectbox("Zone", ["us-central1-a", "us-west1-a", "europe-west1-a"], key="new_vm_zone")
+            new_vm_region = st.selectbox("Region", regions, index=0, key="new_vm_region")
         with col3:
-            vm_type = st.selectbox("Machine Type", ["e2-micro", "e2-small", "e2-medium"], key="new_vm_type")
+            # Zone based on region
+            zones_list = region_to_zones.get(new_vm_region, region_to_zones[regions[0]])
+            vm_zone = st.selectbox("Zone", zones_list, index=0, key="new_vm_zone")
         with col4:
-            if st.button("➕ Add", key="add_vm"):
-                if vm_name:
-                    new_vm = {
-                        "name": vm_name,
-                        "zone": vm_zone,
-                        "machine_type": vm_type,
-                        "image": "debian-cloud/debian-11",
-                        "create_public_ip": False
+            # Machine type selection lives in Advanced Options below
+            if 'new_vm_machine_type' not in st.session_state:
+                st.session_state.new_vm_machine_type = "e2-standard-2"
+            st.markdown(f"**Machine type**: `{st.session_state.new_vm_machine_type}`")
+            if st.button("Change machine type", key="new_vm_change_type"):
+                st.session_state["open_new_vm_adv"] = True
+                st.rerun()
+        with col5:
+            add_clicked = st.button("➕ Add", key="add_vm")
+
+        with st.expander("🔧 Advanced Options for New VM", expanded=st.session_state.get("open_new_vm_adv", False)):
+            nc1, nc2, nc3 = st.columns(3)
+            with nc1:
+                vm_image = st.text_input("Boot Image", value="debian-cloud/debian-11", key="new_vm_image")
+                vm_description = st.text_input("Description", value="", key="new_vm_desc")
+                vm_hostname = st.text_input("Hostname (FQDN)", value="", key="new_vm_host")
+                vm_min_cpu = st.text_input("Min CPU Platform", value="", key="new_vm_min_cpu")
+            with nc2:
+                vm_network = st.text_input("Network (name/self_link)", value="", key="new_vm_net")
+                vm_subnet = st.text_input("Subnetwork (name/self_link)", value="", key="new_vm_sub")
+                vm_network_ip = st.text_input("Primary Internal IP", value="", key="new_vm_nip")
+                vm_ext_tier = st.selectbox("External IP Tier", ["", "PREMIUM", "STANDARD"], key="new_vm_eip_tier")
+            with nc3:
+                vm_assign_eip = st.checkbox("Assign External IPv4", value=False, key="new_vm_eip")
+                vm_allow_stop = st.checkbox("Allow Stop for Update", value=True, key="new_vm_allow_stop")
+                vm_can_ip_forward = st.checkbox("Can IP Forward", value=False, key="new_vm_ipf")
+                vm_del_prot = st.checkbox("Deletion Protection", value=False, key="new_vm_delprot")
+                vm_enable_display = st.checkbox("Enable Display Device", value=False, key="new_vm_display")
+
+            nb1, nb2, nb3 = st.columns(3)
+            with nb1:
+                vm_boot_size = st.number_input("Boot Disk Size (GB)", min_value=10, value=10, key="new_vm_bsize")
+                vm_boot_type = st.selectbox("Boot Disk Type", ["", "pd-standard", "pd-balanced", "pd-ssd"], key="new_vm_btype")
+                vm_boot_auto = st.checkbox("Boot Disk Auto Delete", value=True, key="new_vm_bauto")
+            with nb2:
+                vm_sa_email = st.text_input("Service Account Email", value="", key="new_vm_sa")
+                vm_sa_scopes = st.text_area("Service Account Scopes (comma-separated)", value="https://www.googleapis.com/auth/cloud-platform", key="new_vm_scopes")
+                vm_tags = st.text_input("Tags (comma-separated)", value="", key="new_vm_tags")
+            with nb3:
+                vm_preempt = st.checkbox("Preemptible / Spot", value=False, key="new_vm_preempt")
+                vm_auto_restart = st.checkbox("Automatic Restart", value=True, key="new_vm_autorst")
+                vm_ohm = st.selectbox("On Host Maintenance", ["", "MIGRATE", "TERMINATE"], key="new_vm_ohm")
+                vm_prov_model = st.selectbox("Provisioning Model", ["", "STANDARD", "SPOT"], key="new_vm_prov")
+
+            nb4, nb5 = st.columns(2)
+            with nb4:
+                vm_enable_shielded = st.checkbox("Enable Shielded VM", value=False, key="new_vm_shielded")
+                vm_sh_secure = st.checkbox("Shielded Secure Boot", value=False, key="new_vm_shs")
+                vm_sh_vtpm = st.checkbox("Shielded vTPM", value=True, key="new_vm_shv")
+                vm_sh_integrity = st.checkbox("Shielded Integrity Monitoring", value=True, key="new_vm_shi")
+            with nb5:
+                vm_enable_conf = st.checkbox("Enable Confidential Compute", value=False, key="new_vm_conf")
+                vm_conf_type = st.selectbox("Confidential Type", ["", "SEV", "SEV_SNP", "TDX"], key="new_vm_conf_type")
+
+            # JSON inputs
+            nja, njb, njc = st.columns(3)
+            with nja:
+                vm_labels_str = st.text_area("Labels (JSON)", value="{}", key="new_vm_labels")
+            with njb:
+                vm_metadata_str = st.text_area("Metadata (JSON)", value="{}", key="new_vm_metadata")
+            with njc:
+                vm_boot_labels_str = st.text_area("Boot Disk Labels (JSON)", value="{}", key="new_vm_blabels")
+
+            vm_startup = st.text_area("Startup Script", value="", key="new_vm_startup")
+            vm_gpus_str = st.text_area("Guest Accelerators (JSON list)", value="[]", key="new_vm_gpus")
+
+            # Live estimate for new VM
+            tmp_vm = {
+                "machine_type": st.session_state.new_vm_machine_type,
+                "boot_disk_size_gb": vm_boot_size,
+                "boot_disk_type": vm_boot_type or "pd-balanced",
+            }
+            est_new = estimate_vm_cost_monthly(tmp_vm)
+            st.markdown("**Monthly estimate**")
+            st.markdown(f"${est_new['total']:.2f}")
+            st.caption(f"That's about ${est_new['hourly_compute']:.2f} hourly (compute only)")
+            with st.expander("View breakdown", expanded=False):
+                st.markdown("Item | Monthly estimate")
+                st.markdown("--- | ---")
+                st.markdown(f"{int(est_new['vcpu']) if est_new['vcpu'].is_integer() else est_new['vcpu']} vCPU + {int(est_new['mem_gb']) if est_new['mem_gb'].is_integer() else est_new['mem_gb']} GB memory | ${est_new['monthly_compute']:.2f}")
+                st.markdown(f"{int(vm_boot_size)} GB {vm_boot_type or 'pd-balanced'} persistent disk | ${est_new['disk_month']:.2f}")
+                st.markdown("Logging | Cost varies")
+                st.markdown("Monitoring | Cost varies")
+                st.markdown("Snapshot schedule | Cost varies")
+
+            # Machine Type Selection
+            st.markdown("**Machine Type Selection**")
+            tabs = st.tabs(["General purpose", "Compute optimized", "Memory optimized", "Storage optimized", "GPUs"])
+            with tabs[0]:
+                catalog = gp_series_catalog()
+                series = list(catalog.keys())
+                sel_series = st.selectbox("Series", series, index=series.index('E2') if 'E2' in series else 0, key="new_vm_series")
+                # Preset/Custom
+                sub_tabs = st.tabs(["Preset", "Custom"])
+                with sub_tabs[0]:
+                    families = ["Shared-core", "Standard", "High memory", "High CPU"]
+                    fam = st.radio("instance sizes", families, horizontal=True, key="new_vm_e2_family")
+                    e2_family_map = {
+                        "Shared-core": [("e2-medium", "1-2 vCPU (1 shared core), 4 GB memory"),("e2-micro", "0.25-2 vCPU (1 shared core), 1 GB memory"),("e2-small", "0.5-2 vCPU (1 shared core), 2 GB memory")],
+                        "Standard": [("e2-standard-2","2 vCPU (1 core), 8 GB memory"),("e2-standard-4","4 vCPU (2 core), 16 GB memory"),("e2-standard-8","8 vCPU (4 core), 32 GB memory"),("e2-standard-16","16 vCPU (8 core), 64 GB memory"),("e2-standard-32","32 vCPU (16 core), 128 GB memory")],
+                        "High memory": [("e2-highmem-2","2 vCPU (1 core), 16 GB memory"),("e2-highmem-4","4 vCPU (2 core), 32 GB memory"),("e2-highmem-8","8 vCPU (4 core), 64 GB memory"),("e2-highmem-16","16 vCPU (8 core), 128 GB memory")],
+                        "High CPU": [("e2-highcpu-2","2 vCPU (1 core), 2 GB memory"),("e2-highcpu-4","4 vCPU (2 core), 4 GB memory"),("e2-highcpu-8","8 vCPU (4 core), 8 GB memory"),("e2-highcpu-16","16 vCPU (8 core), 16 GB memory"),("e2-highcpu-32","32 vCPU (16 core), 32 GB memory")],
                     }
-                    st.session_state.compute_instances.append(new_vm)
-                    st.rerun()
-        
+                    opts = [f"{name} – {desc}" for name, desc in e2_family_map[fam]]
+                    sel_opt = st.selectbox("", opts, index=0, label_visibility="collapsed", key="new_vm_e2_opt")
+                    chosen_mt = e2_family_map[fam][opts.index(sel_opt)][0]
+                    if chosen_mt != st.session_state.new_vm_machine_type:
+                        st.session_state.new_vm_machine_type = chosen_mt
+                        st.rerun()
+                with sub_tabs[1]:
+                    st.info("Custom machine type coming next (manual vCPU & memory sliders).")
+
+        if add_clicked and vm_name:
+            def parse_json_default(s, default):
+                try:
+                    return json.loads(s) if s else default
+                except Exception:
+                    return default
+            new_vm = {
+                "name": vm_name,
+                "region": new_vm_region,
+                "zone": vm_zone,
+                "machine_type": st.session_state.new_vm_machine_type,
+                "image": vm_image,
+                "description": vm_description or None,
+                "hostname": vm_hostname or None,
+                "min_cpu_platform": vm_min_cpu or None,
+                "network": vm_network or None,
+                "subnetwork": vm_subnet or None,
+                "network_ip": vm_network_ip or None,
+                "external_network_tier": vm_ext_tier or None,
+                "assign_external_ip": bool(vm_assign_eip),
+                "allow_stopping_for_update": bool(vm_allow_stop),
+                "can_ip_forward": bool(vm_can_ip_forward),
+                "deletion_protection": bool(vm_del_prot),
+                "enable_display": bool(vm_enable_display),
+                "boot_disk_size_gb": int(vm_boot_size) if vm_boot_size else None,
+                "boot_disk_type": vm_boot_type or None,
+                "boot_disk_auto_delete": bool(vm_boot_auto),
+                "service_account_email": vm_sa_email or None,
+                "service_account_scopes": [s.strip() for s in (vm_sa_scopes or '').split(',') if s.strip()] or ["https://www.googleapis.com/auth/cloud-platform"],
+                "tags": [t.strip() for t in (vm_tags or '').split(',') if t.strip()],
+                "scheduling_preemptible": bool(vm_preempt),
+                "scheduling_automatic_restart": bool(vm_auto_restart),
+                "scheduling_on_host_maintenance": vm_ohm or None,
+                "scheduling_provisioning_model": vm_prov_model or None,
+                "enable_shielded_vm": bool(vm_enable_shielded),
+                "shielded_secure_boot": bool(vm_sh_secure),
+                "shielded_vtpm": bool(vm_sh_vtpm),
+                "shielded_integrity_monitoring": bool(vm_sh_integrity),
+                "enable_confidential_compute": bool(vm_enable_conf),
+                "confidential_instance_type": vm_conf_type or None,
+                "labels": parse_json_default(vm_labels_str, {}),
+                "metadata": parse_json_default(vm_metadata_str, {}),
+                "boot_disk_labels": parse_json_default(vm_boot_labels_str, {}),
+                "metadata_startup_script": vm_startup or None,
+                "guest_accelerators": parse_json_default(vm_gpus_str, []),
+            }
+            st.session_state.compute_instances.append(new_vm)
+            st.rerun()
+
         if st.session_state.compute_instances:
             resources["compute_instances"] = st.session_state.compute_instances
     
@@ -2050,6 +2945,153 @@ def project_builder():
             mime="text/yaml"
         )
 
+    # New: Generate Terraform Files button
+    if st.button("🛠️ Generate Terraform Files"):
+        if not project_id or not billing_account:
+            st.error("Please fill in Project ID and Billing Account")
+            return
+
+        # Reconstruct the same config structure as YAML generation (without requiring prior click)
+        from collections import OrderedDict
+        config: Dict[str, Any] = OrderedDict()
+        config["project_id"] = project_id
+        config["billing_account"] = billing_account
+        if organization_id:
+            config["organization_id"] = organization_id
+        if labels and isinstance(labels, dict):
+            config["labels"] = labels
+        if selected_apis:
+            config["apis"] = selected_apis
+        config["resources"] = resources or {}
+
+        # Clean helper (match YAML flow)
+        def clean_null_values(obj):
+            if isinstance(obj, dict):
+                return {k: clean_null_values(v) for k, v in obj.items() if v not in (None, "", [], {})}
+            if isinstance(obj, list):
+                return [clean_null_values(i) for i in obj if i not in (None, "", [], {})]
+            return obj
+
+        cleaned_config = clean_null_values(config)
+
+        # Generate standalone Terraform files (no external dependencies) entirely in-memory
+        try:
+            # Determine whether to create project (best-effort, non-fatal)
+            create_project = True
+            try:
+                result = subprocess.run([
+                    "gcloud", "projects", "list",
+                    f"--filter=projectId={project_id}",
+                    "--format=value(projectId)"
+                ], check=False, capture_output=True, text=True, timeout=10)
+                if result.returncode == 0 and (result.stdout or "").strip() == project_id:
+                    create_project = False
+            except Exception:
+                pass
+
+            # Build files in memory
+            main_tf_content = generate_standalone_main_tf(cleaned_config, create_project)
+            variables_tf_content = generate_standalone_variables_tf(cleaned_config)
+            outputs_tf_content = (
+                "output \"project_id\" {\n  value = var.project_id\n}\n\n"
+                "output \"enabled_apis\" {\n  value = var.apis\n}\n"
+            )
+            # HCL tfvars
+            tfvars_hcl = []
+            tfvars_hcl.append(f"project_id = \"{config['project_id']}\"")
+            if config.get("organization_id"):
+                tfvars_hcl.append(f"organization_id = \"{config['organization_id']}\"")
+            tfvars_hcl.append(f"billing_account = \"{config['billing_account']}\"")
+            if config.get("labels"):
+                tfvars_hcl.append("labels = {")
+                for k, v in (config.get("labels") or {}).items():
+                    tfvars_hcl.append(f"  \"{k}\" = \"{v}\"")
+                tfvars_hcl.append("}")
+            if config.get("apis"):
+                apis_list = ", ".join([f'\"{a}\"' for a in config.get("apis", [])])
+                tfvars_hcl.append(f"apis = [{apis_list}]")
+            tfvars_hcl_content = "\n".join(tfvars_hcl) + "\n"
+            
+            tfvars_json_content = json.dumps(cleaned_config, indent=2)
+
+            # Save in session_state only
+            st.session_state.generated_tf_files = {
+                "main.tf": main_tf_content,
+                "variables.tf": variables_tf_content,
+                "outputs.tf": outputs_tf_content,
+                "terraform.tfvars": tfvars_hcl_content,
+                "terraform.tfvars.json": tfvars_json_content,
+            }
+
+            # Store generation timestamp
+            from datetime import datetime
+            st.session_state.generation_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            st.success(f"Terraform files generated for project: {project_id}")
+
+            # Display generated files content like YAML section
+            files_to_show = ["main.tf", "variables.tf", "outputs.tf", "terraform.tfvars"]
+            file_map = {k: v for k, v in st.session_state.generated_tf_files.items() if k in files_to_show}
+
+            if file_map:
+                st.subheader("📄 Generated Terraform Files")
+                for file_name, content in file_map.items():
+                    st.markdown(f"**{file_name}:**")
+                    st.code(content, language="hcl" if file_name.endswith('.tf') or file_name.endswith('.tfvars') else "json")
+                    st.markdown("---")
+
+                # ZIP download option (like YAML download button)
+                import zipfile
+                import io
+                
+                # Create ZIP content
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for fname, fcontent in st.session_state.generated_tf_files.items():
+                        zip_file.writestr(fname, fcontent)
+                    readme_content = f"""# Terraform Configuration for {project_id}
+
+This ZIP contains standalone Terraform files generated from the GCP Project Creator GUI.
+
+## Files included:
+- main.tf: Main Terraform configuration
+- variables.tf: Variable definitions
+- outputs.tf: Output definitions
+- terraform.tfvars: Variable values (HCL format)
+- terraform.tfvars.json: Variable values (JSON format)
+
+## Usage:
+1. Extract all files to a directory
+2. Run: terraform init
+3. Run: terraform plan
+4. Run: terraform apply
+
+## Requirements:
+- Terraform >= 1.6.0
+- Google Cloud Provider >= 7.4.0
+- Valid GCP credentials configured
+
+Generated on: {st.session_state.get('generation_time', 'Unknown')}
+Project ID: {project_id}
+"""
+                    zip_file.writestr("README.md", readme_content)
+                
+                zip_buffer.seek(0)
+                zip_bytes = zip_buffer.getvalue()
+                
+                # Download button (same as YAML style)
+                st.download_button(
+                    label="📥 Download All Terraform Files as ZIP",
+                    data=zip_bytes,
+                    file_name=f"{project_id}-terraform.zip",
+                    mime="application/zip"
+                )
+            else:
+                st.warning("No Terraform files were generated")
+
+        except Exception as e:
+            st.error(f"Failed to generate Terraform files: {e}")
+
 def config_manager():
     st.header("📋 Configuration Manager")
     st.markdown("Manage and edit your project configurations")
@@ -2480,7 +3522,7 @@ def help_examples():
     st.code(yaml.dump(simple_example, default_flow_style=False), language="yaml")
     
     # Advanced project example
-    st.markdown("**Advanced Project with VPC, Cloud Run, and Database**")
+    st.markdown("**Advanced Project with VPC, Cloud Run, Database, and VM**")
     advanced_example = {
         "project_id": "my-advanced-project",
         "billing_account": "01783B-A7A65B-153181",
@@ -2516,6 +3558,33 @@ def help_examples():
                 "location": "us-central1",
                 "image": "gcr.io/cloudrun/hello",
                 "vpc_connector": "run-connector"
+            }],
+            "compute_instances": [{
+                "name": "app-vm",
+                "zone": "us-central1-a",
+                "machine_type": "e2-standard-2",
+                "image": "debian-cloud/debian-11",
+                "description": "Application server",
+                "network": "production-vpc",
+                "subnetwork": "app-subnet",
+                "assign_external_ip": True,
+                "external_network_tier": "PREMIUM",
+                "labels": {"env": "prod"},
+                "metadata": {"foo": "bar"},
+                "metadata_startup_script": "#!/bin/bash\nprintf 'hello' > /tmp/hello.txt\n",
+                "boot_disk_size_gb": 20,
+                "boot_disk_type": "pd-balanced",
+                "boot_disk_auto_delete": True,
+                "tags": ["web", "ssh"],
+                "service_account_email": "custom-sa@my-proj.iam.gserviceaccount.com",
+                "service_account_scopes": ["https://www.googleapis.com/auth/cloud-platform"],
+                "scheduling_preemptible": False,
+                "scheduling_automatic_restart": True,
+                "scheduling_on_host_maintenance": "MIGRATE",
+                "enable_shielded_vm": True,
+                "shielded_secure_boot": True,
+                "guest_accelerators": [],
+                "deletion_protection": False
             }],
             "cloud_sql_instances": [{
                 "name": "app-database",
