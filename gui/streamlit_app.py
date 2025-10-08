@@ -2154,10 +2154,597 @@ def project_builder():
                 "total": total,
             }
 
+        # ---- Machine series specifications ----
+        def get_machine_series_data() -> list:
+            """Return machine series data for table display"""
+            return [
+                {"Series": "C4", "Description": "Consistently high performance", "vCPUs": "2 - 288", "Memory": "4 - 2,232 GB", "CPU Platform": "Intel Emerald Rapids"},
+                {"Series": "C4A", "Description": "Arm-based consistently high performance", "vCPUs": "1 - 72", "Memory": "2 - 576 GB", "CPU Platform": "Google Axion"},
+                {"Series": "C4D", "Description": "Consistently high performance", "vCPUs": "2 - 384", "Memory": "3 - 3,072 GB", "CPU Platform": "AMD Turin"},
+                {"Series": "N4", "Description": "Flexible & cost-optimized", "vCPUs": "2 - 80", "Memory": "4 - 640 GB", "CPU Platform": "Intel Emerald Rapids"},
+                {"Series": "C3", "Description": "Consistently high performance", "vCPUs": "4 - 192", "Memory": "8 - 1,536 GB", "CPU Platform": "Intel Sapphire Rapids"},
+                {"Series": "C3D", "Description": "Consistently high performance", "vCPUs": "4 - 360", "Memory": "8 - 2,880 GB", "CPU Platform": "AMD Genoa"},
+                {"Series": "E2", "Description": "Low cost, day-to-day computing", "vCPUs": "0.25 - 32", "Memory": "1 - 128 GB", "CPU Platform": "Intel Broadwell"},
+                {"Series": "N2", "Description": "Balanced price & performance", "vCPUs": "2 - 128", "Memory": "2 - 864 GB", "CPU Platform": "Intel Cascade Lake"},
+                {"Series": "N2D", "Description": "Balanced price & performance", "vCPUs": "2 - 224", "Memory": "2 - 896 GB", "CPU Platform": "AMD Milan"},
+                {"Series": "T2A", "Description": "Scale-out workloads", "vCPUs": "1 - 48", "Memory": "4 - 192 GB", "CPU Platform": "Ampere Altra"},
+                {"Series": "T2D", "Description": "Scale-out workloads", "vCPUs": "1 - 60", "Memory": "4 - 240 GB", "CPU Platform": "AMD Milan"},
+                {"Series": "N1", "Description": "Balanced price & performance", "vCPUs": "0.25 - 96", "Memory": "0.6 - 624 GB", "CPU Platform": "Intel Haswell"}
+            ]
+        
+        def get_series_presets(series: str) -> Dict[str, list]:
+            """Get presets for a specific series"""
+            presets = {
+                "C4": {
+                    "Standard": [
+                        ("c4-standard-2", "2 vCPU (1 core), 7 GB memory"),
+                        ("c4-standard-4", "4 vCPU (2 core), 15 GB memory"),
+                        ("c4-standard-8", "8 vCPU (4 core), 30 GB memory"),
+                        ("c4-standard-16", "16 vCPU (8 core), 60 GB memory"),
+                        ("c4-standard-24", "24 vCPU (12 core), 90 GB memory"),
+                        ("c4-standard-32", "32 vCPU (16 core), 120 GB memory"),
+                        ("c4-standard-48", "48 vCPU (24 core), 180 GB memory"),
+                        ("c4-standard-96", "96 vCPU (48 core), 360 GB memory"),
+                        ("c4-standard-144", "144 vCPU (72 core), 540 GB memory"),
+                        ("c4-standard-192", "192 vCPU (96 core), 720 GB memory"),
+                        ("c4-standard-288", "288 vCPU (144 core), 1,080 GB memory"),
+                        ("c4-standard-288-metal", "288 vCPU, 1,080 GB memory")
+                    ],
+                    "Standard with local SSD": [
+                        ("c4-standard-4-lssd", "4 vCPU (2 core), 15 GB memory, 1 Local SSD disks"),
+                        ("c4-standard-8-lssd", "8 vCPU (4 core), 30 GB memory, 1 Local SSD disks"),
+                        ("c4-standard-16-lssd", "16 vCPU (8 core), 60 GB memory, 2 Local SSD disks"),
+                        ("c4-standard-24-lssd", "24 vCPU (12 core), 90 GB memory, 4 Local SSD disks"),
+                        ("c4-standard-32-lssd", "32 vCPU (16 core), 120 GB memory, 5 Local SSD disks"),
+                        ("c4-standard-48-lssd", "48 vCPU (24 core), 180 GB memory, 8 Local SSD disks"),
+                        ("c4-standard-96-lssd", "96 vCPU (48 core), 360 GB memory, 16 Local SSD disks"),
+                        ("c4-standard-144-lssd", "144 vCPU (72 core), 540 GB memory, 24 Local SSD disks"),
+                        ("c4-standard-192-lssd", "192 vCPU (96 core), 720 GB memory, 32 Local SSD disks"),
+                        ("c4-standard-288-lssd", "288 vCPU (144 core), 1,080 GB memory, 48 Local SSD disks")
+                    ],
+                    "High memory": [
+                        ("c4-highmem-2", "2 vCPU (1 core), 15 GB memory"),
+                        ("c4-highmem-4", "4 vCPU (2 core), 31 GB memory"),
+                        ("c4-highmem-8", "8 vCPU (4 core), 62 GB memory"),
+                        ("c4-highmem-16", "16 vCPU (8 core), 124 GB memory"),
+                        ("c4-highmem-24", "24 vCPU (12 core), 186 GB memory"),
+                        ("c4-highmem-32", "32 vCPU (16 core), 248 GB memory"),
+                        ("c4-highmem-48", "48 vCPU (24 core), 372 GB memory"),
+                        ("c4-highmem-96", "96 vCPU (48 core), 744 GB memory"),
+                        ("c4-highmem-144", "144 vCPU (72 core), 1,116 GB memory"),
+                        ("c4-highmem-192", "192 vCPU (96 core), 1,488 GB memory"),
+                        ("c4-highmem-288", "288 vCPU (144 core), 2,232 GB memory"),
+                        ("c4-highmem-288-metal", "288 vCPU, 2,232 GB memory")
+                    ],
+                    "High memory with local SSD": [
+                        ("c4-highmem-4-lssd", "4 vCPU (2 core), 31 GB memory, 1 Local SSD disks"),
+                        ("c4-highmem-8-lssd", "8 vCPU (4 core), 62 GB memory, 1 Local SSD disks"),
+                        ("c4-highmem-16-lssd", "16 vCPU (8 core), 124 GB memory, 2 Local SSD disks"),
+                        ("c4-highmem-24-lssd", "24 vCPU (12 core), 186 GB memory, 4 Local SSD disks"),
+                        ("c4-highmem-32-lssd", "32 vCPU (16 core), 248 GB memory, 5 Local SSD disks"),
+                        ("c4-highmem-48-lssd", "48 vCPU (24 core), 372 GB memory, 8 Local SSD disks"),
+                        ("c4-highmem-96-lssd", "96 vCPU (48 core), 744 GB memory, 16 Local SSD disks"),
+                        ("c4-highmem-144-lssd", "144 vCPU (72 core), 1,116 GB memory, 24 Local SSD disks"),
+                        ("c4-highmem-192-lssd", "192 vCPU (96 core), 1,488 GB memory, 32 Local SSD disks"),
+                        ("c4-highmem-288-lssd", "288 vCPU (144 core), 2,232 GB memory, 48 Local SSD disks")
+                    ],
+                    "High CPU": [
+                        ("c4-highcpu-2", "2 vCPU (1 core), 4 GB memory"),
+                        ("c4-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
+                        ("c4-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
+                        ("c4-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
+                        ("c4-highcpu-24", "24 vCPU (12 core), 48 GB memory"),
+                        ("c4-highcpu-32", "32 vCPU (16 core), 64 GB memory"),
+                        ("c4-highcpu-48", "48 vCPU (24 core), 96 GB memory"),
+                        ("c4-highcpu-96", "96 vCPU (48 core), 192 GB memory"),
+                        ("c4-highcpu-144", "144 vCPU (72 core), 288 GB memory"),
+                        ("c4-highcpu-192", "192 vCPU (96 core), 384 GB memory"),
+                        ("c4-highcpu-288", "288 vCPU (144 core), 576 GB memory")
+                    ]
+                },
+                "C4A": {
+                    "Standard": [
+                        ("c4a-standard-1", "1 vCPU, 4 GB memory"),
+                        ("c4a-standard-2", "2 vCPU, 8 GB memory"),
+                        ("c4a-standard-4", "4 vCPU, 16 GB memory"),
+                        ("c4a-standard-8", "8 vCPU, 32 GB memory"),
+                        ("c4a-standard-16", "16 vCPU, 64 GB memory"),
+                        ("c4a-standard-32", "32 vCPU, 128 GB memory"),
+                        ("c4a-standard-48", "48 vCPU, 192 GB memory"),
+                        ("c4a-standard-64", "64 vCPU, 256 GB memory"),
+                        ("c4a-standard-72", "72 vCPU, 288 GB memory")
+                    ],
+                    "Standard with local SSD": [
+                        ("c4a-standard-4-lssd", "4 vCPU, 16 GB memory, 1 Local SSD disks"),
+                        ("c4a-standard-8-lssd", "8 vCPU, 32 GB memory, 2 Local SSD disks"),
+                        ("c4a-standard-16-lssd", "16 vCPU, 64 GB memory, 4 Local SSD disks"),
+                        ("c4a-standard-32-lssd", "32 vCPU, 128 GB memory, 6 Local SSD disks"),
+                        ("c4a-standard-48-lssd", "48 vCPU, 192 GB memory, 10 Local SSD disks"),
+                        ("c4a-standard-64-lssd", "64 vCPU, 256 GB memory, 14 Local SSD disks"),
+                        ("c4a-standard-72-lssd", "72 vCPU, 288 GB memory, 16 Local SSD disks")
+                    ],
+                    "High memory": [
+                        ("c4a-highmem-1", "1 vCPU, 8 GB memory"),
+                        ("c4a-highmem-2", "2 vCPU, 16 GB memory"),
+                        ("c4a-highmem-4", "4 vCPU, 32 GB memory"),
+                        ("c4a-highmem-8", "8 vCPU, 64 GB memory"),
+                        ("c4a-highmem-16", "16 vCPU, 128 GB memory"),
+                        ("c4a-highmem-32", "32 vCPU, 256 GB memory"),
+                        ("c4a-highmem-48", "48 vCPU, 384 GB memory"),
+                        ("c4a-highmem-64", "64 vCPU, 512 GB memory"),
+                        ("c4a-highmem-72", "72 vCPU, 576 GB memory")
+                    ],
+                    "High memory with local SSD": [
+                        ("c4a-highmem-4-lssd", "4 vCPU, 32 GB memory, 1 Local SSD disks"),
+                        ("c4a-highmem-8-lssd", "8 vCPU, 64 GB memory, 2 Local SSD disks"),
+                        ("c4a-highmem-16-lssd", "16 vCPU, 128 GB memory, 4 Local SSD disks"),
+                        ("c4a-highmem-32-lssd", "32 vCPU, 256 GB memory, 6 Local SSD disks"),
+                        ("c4a-highmem-48-lssd", "48 vCPU, 384 GB memory, 10 Local SSD disks"),
+                        ("c4a-highmem-64-lssd", "64 vCPU, 512 GB memory, 14 Local SSD disks"),
+                        ("c4a-highmem-72-lssd", "72 vCPU, 576 GB memory, 16 Local SSD disks")
+                    ],
+                    "High CPU": [
+                        ("c4a-highcpu-1", "1 vCPU, 2 GB memory"),
+                        ("c4a-highcpu-2", "2 vCPU, 4 GB memory"),
+                        ("c4a-highcpu-4", "4 vCPU, 8 GB memory"),
+                        ("c4a-highcpu-8", "8 vCPU, 16 GB memory"),
+                        ("c4a-highcpu-16", "16 vCPU, 32 GB memory"),
+                        ("c4a-highcpu-32", "32 vCPU, 64 GB memory"),
+                        ("c4a-highcpu-48", "48 vCPU, 96 GB memory"),
+                        ("c4a-highcpu-64", "64 vCPU, 128 GB memory"),
+                        ("c4a-highcpu-72", "72 vCPU, 144 GB memory")
+                    ]
+                },
+                "C4D": {
+                    "Standard": [
+                        ("c4d-standard-2", "2 vCPU (1 core), 7 GB memory"),
+                        ("c4d-standard-4", "4 vCPU (2 core), 15 GB memory"),
+                        ("c4d-standard-8", "8 vCPU (4 core), 31 GB memory"),
+                        ("c4d-standard-16", "16 vCPU (8 core), 62 GB memory"),
+                        ("c4d-standard-32", "32 vCPU (16 core), 124 GB memory"),
+                        ("c4d-standard-48", "48 vCPU (24 core), 186 GB memory"),
+                        ("c4d-standard-64", "64 vCPU (32 core), 248 GB memory"),
+                        ("c4d-standard-96", "96 vCPU (48 core), 372 GB memory"),
+                        ("c4d-standard-192", "192 vCPU (96 core), 744 GB memory"),
+                        ("c4d-standard-384", "384 vCPU (192 core), 1,488 GB memory"),
+                        ("c4d-standard-384-metal", "384 vCPU, 1,536 GB memory")
+                    ],
+                    "Standard with local SSD": [
+                        ("c4d-standard-8-lssd", "8 vCPU (4 core), 31 GB memory, 1 Local SSD disks"),
+                        ("c4d-standard-16-lssd", "16 vCPU (8 core), 62 GB memory, 1 Local SSD disks"),
+                        ("c4d-standard-32-lssd", "32 vCPU (16 core), 124 GB memory, 2 Local SSD disks"),
+                        ("c4d-standard-48-lssd", "48 vCPU (24 core), 186 GB memory, 4 Local SSD disks"),
+                        ("c4d-standard-64-lssd", "64 vCPU (32 core), 248 GB memory, 6 Local SSD disks"),
+                        ("c4d-standard-96-lssd", "96 vCPU (48 core), 372 GB memory, 8 Local SSD disks"),
+                        ("c4d-standard-192-lssd", "192 vCPU (96 core), 744 GB memory, 16 Local SSD disks"),
+                        ("c4d-standard-384-lssd", "384 vCPU (192 core), 1,488 GB memory, 32 Local SSD disks")
+                    ],
+                    "High memory": [
+                        ("c4d-highmem-2", "2 vCPU (1 core), 15 GB memory"),
+                        ("c4d-highmem-4", "4 vCPU (2 core), 31 GB memory"),
+                        ("c4d-highmem-8", "8 vCPU (4 core), 63 GB memory"),
+                        ("c4d-highmem-16", "16 vCPU (8 core), 126 GB memory"),
+                        ("c4d-highmem-32", "32 vCPU (16 core), 252 GB memory"),
+                        ("c4d-highmem-48", "48 vCPU (24 core), 378 GB memory"),
+                        ("c4d-highmem-64", "64 vCPU (32 core), 504 GB memory"),
+                        ("c4d-highmem-96", "96 vCPU (48 core), 756 GB memory"),
+                        ("c4d-highmem-192", "192 vCPU (96 core), 1,512 GB memory"),
+                        ("c4d-highmem-384", "384 vCPU (192 core), 3,024 GB memory"),
+                        ("c4d-highmem-384-metal", "384 vCPU, 3,072 GB memory")
+                    ],
+                    "High memory with local SSD": [
+                        ("c4d-highmem-8-lssd", "8 vCPU (4 core), 63 GB memory, 1 Local SSD disks"),
+                        ("c4d-highmem-16-lssd", "16 vCPU (8 core), 126 GB memory, 1 Local SSD disks"),
+                        ("c4d-highmem-32-lssd", "32 vCPU (16 core), 252 GB memory, 2 Local SSD disks"),
+                        ("c4d-highmem-48-lssd", "48 vCPU (24 core), 378 GB memory, 4 Local SSD disks"),
+                        ("c4d-highmem-64-lssd", "64 vCPU (32 core), 504 GB memory, 6 Local SSD disks"),
+                        ("c4d-highmem-96-lssd", "96 vCPU (48 core), 756 GB memory, 8 Local SSD disks"),
+                        ("c4d-highmem-192-lssd", "192 vCPU (96 core), 1,512 GB memory, 16 Local SSD disks"),
+                        ("c4d-highmem-384-lssd", "384 vCPU (192 core), 3,024 GB memory, 32 Local SSD disks")
+                    ],
+                    "High CPU": [
+                        ("c4d-highcpu-2", "2 vCPU (1 core), 3 GB memory"),
+                        ("c4d-highcpu-4", "4 vCPU (2 core), 7 GB memory"),
+                        ("c4d-highcpu-8", "8 vCPU (4 core), 15 GB memory"),
+                        ("c4d-highcpu-16", "16 vCPU (8 core), 30 GB memory"),
+                        ("c4d-highcpu-32", "32 vCPU (16 core), 60 GB memory"),
+                        ("c4d-highcpu-48", "48 vCPU (24 core), 90 GB memory"),
+                        ("c4d-highcpu-64", "64 vCPU (32 core), 120 GB memory"),
+                        ("c4d-highcpu-96", "96 vCPU (48 core), 180 GB memory"),
+                        ("c4d-highcpu-192", "192 vCPU (96 core), 360 GB memory"),
+                        ("c4d-highcpu-384", "384 vCPU (192 core), 720 GB memory"),
+                        ("c4d-highcpu-384-metal", "384 vCPU, 768 GB memory")
+                    ]
+                },
+                "N4": {
+                    "Standard": [
+                        ("n4-standard-2", "2 vCPU (1 core), 8 GB memory"),
+                        ("n4-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                        ("n4-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                        ("n4-standard-16", "16 vCPU (8 core), 64 GB memory"),
+                        ("n4-standard-32", "32 vCPU (16 core), 128 GB memory"),
+                        ("n4-standard-48", "48 vCPU (24 core), 192 GB memory"),
+                        ("n4-standard-64", "64 vCPU (32 core), 256 GB memory"),
+                        ("n4-standard-80", "80 vCPU (40 core), 320 GB memory")
+                    ],
+                    "High memory": [
+                        ("n4-highmem-2", "2 vCPU (1 core), 16 GB memory"),
+                        ("n4-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                        ("n4-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                        ("n4-highmem-16", "16 vCPU (8 core), 128 GB memory"),
+                        ("n4-highmem-32", "32 vCPU (16 core), 256 GB memory"),
+                        ("n4-highmem-48", "48 vCPU (24 core), 384 GB memory"),
+                        ("n4-highmem-64", "64 vCPU (32 core), 512 GB memory"),
+                        ("n4-highmem-80", "80 vCPU (40 core), 640 GB memory")
+                    ],
+                    "High CPU": [
+                        ("n4-highcpu-2", "2 vCPU (1 core), 4 GB memory"),
+                        ("n4-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
+                        ("n4-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
+                        ("n4-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
+                        ("n4-highcpu-32", "32 vCPU (16 core), 64 GB memory"),
+                        ("n4-highcpu-48", "48 vCPU (24 core), 96 GB memory"),
+                        ("n4-highcpu-64", "64 vCPU (32 core), 128 GB memory"),
+                        ("n4-highcpu-80", "80 vCPU (40 core), 160 GB memory")
+                    ]
+                },
+                "C3": {
+                    "Standard": [
+                        ("c3-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                        ("c3-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                        ("c3-standard-22", "22 vCPU (11 core), 88 GB memory"),
+                        ("c3-standard-44", "44 vCPU (22 core), 176 GB memory"),
+                        ("c3-standard-88", "88 vCPU (44 core), 352 GB memory"),
+                        ("c3-standard-176", "176 vCPU (88 core), 704 GB memory"),
+                        ("c3-standard-192-metal", "192 vCPU, 768 GB memory")
+                    ],
+                    "Standard with local SSD": [
+                        ("c3-standard-4-lssd", "4 vCPU (2 core), 16 GB memory, 1 Local SSD disks"),
+                        ("c3-standard-8-lssd", "8 vCPU (4 core), 32 GB memory, 2 Local SSD disks"),
+                        ("c3-standard-22-lssd", "22 vCPU (11 core), 88 GB memory, 4 Local SSD disks"),
+                        ("c3-standard-44-lssd", "44 vCPU (22 core), 176 GB memory, 8 Local SSD disks"),
+                        ("c3-standard-88-lssd", "88 vCPU (44 core), 352 GB memory, 16 Local SSD disks"),
+                        ("c3-standard-176-lssd", "176 vCPU (88 core), 704 GB memory, 32 Local SSD disks")
+                    ],
+                    "High memory": [
+                        ("c3-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                        ("c3-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                        ("c3-highmem-22", "22 vCPU (11 core), 176 GB memory"),
+                        ("c3-highmem-44", "44 vCPU (22 core), 352 GB memory"),
+                        ("c3-highmem-88", "88 vCPU (44 core), 704 GB memory"),
+                        ("c3-highmem-176", "176 vCPU (88 core), 1,408 GB memory"),
+                        ("c3-highmem-192-metal", "192 vCPU, 1,536 GB memory")
+                    ],
+                    "High CPU": [
+                        ("c3-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
+                        ("c3-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
+                        ("c3-highcpu-22", "22 vCPU (11 core), 44 GB memory"),
+                        ("c3-highcpu-44", "44 vCPU (22 core), 88 GB memory"),
+                        ("c3-highcpu-88", "88 vCPU (44 core), 176 GB memory"),
+                        ("c3-highcpu-176", "176 vCPU (88 core), 352 GB memory"),
+                        ("c3-highcpu-192-metal", "192 vCPU, 512 GB memory")
+                    ]
+                },
+                "C3D": {
+                    "Standard": [
+                        ("c3d-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                        ("c3d-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                        ("c3d-standard-16", "16 vCPU (8 core), 64 GB memory"),
+                        ("c3d-standard-30", "30 vCPU (15 core), 120 GB memory"),
+                        ("c3d-standard-60", "60 vCPU (30 core), 240 GB memory"),
+                        ("c3d-standard-90", "90 vCPU (45 core), 360 GB memory"),
+                        ("c3d-standard-180", "180 vCPU (90 core), 720 GB memory"),
+                        ("c3d-standard-360", "360 vCPU (180 core), 1,440 GB memory")
+                    ],
+                    "Standard with local SSD": [
+                        ("c3d-standard-8-lssd", "8 vCPU (4 core), 32 GB memory, 1 Local SSD disks"),
+                        ("c3d-standard-16-lssd", "16 vCPU (8 core), 64 GB memory, 1 Local SSD disks"),
+                        ("c3d-standard-30-lssd", "30 vCPU (15 core), 120 GB memory, 2 Local SSD disks"),
+                        ("c3d-standard-60-lssd", "60 vCPU (30 core), 240 GB memory, 4 Local SSD disks"),
+                        ("c3d-standard-90-lssd", "90 vCPU (45 core), 360 GB memory, 8 Local SSD disks"),
+                        ("c3d-standard-180-lssd", "180 vCPU (90 core), 720 GB memory, 16 Local SSD disks"),
+                        ("c3d-standard-360-lssd", "360 vCPU (180 core), 1,440 GB memory, 32 Local SSD disks")
+                    ],
+                    "High memory": [
+                        ("c3d-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                        ("c3d-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                        ("c3d-highmem-16", "16 vCPU (8 core), 128 GB memory"),
+                        ("c3d-highmem-30", "30 vCPU (15 core), 240 GB memory"),
+                        ("c3d-highmem-60", "60 vCPU (30 core), 480 GB memory"),
+                        ("c3d-highmem-90", "90 vCPU (45 core), 720 GB memory"),
+                        ("c3d-highmem-180", "180 vCPU (90 core), 1,440 GB memory"),
+                        ("c3d-highmem-360", "360 vCPU (180 core), 2,880 GB memory")
+                    ],
+                    "High memory with local SSD": [
+                        ("c3d-highmem-8-lssd", "8 vCPU (4 core), 64 GB memory, 1 Local SSD disks"),
+                        ("c3d-highmem-16-lssd", "16 vCPU (8 core), 128 GB memory, 1 Local SSD disks"),
+                        ("c3d-highmem-30-lssd", "30 vCPU (15 core), 240 GB memory, 2 Local SSD disks"),
+                        ("c3d-highmem-60-lssd", "60 vCPU (30 core), 480 GB memory, 4 Local SSD disks"),
+                        ("c3d-highmem-90-lssd", "90 vCPU (45 core), 720 GB memory, 8 Local SSD disks"),
+                        ("c3d-highmem-180-lssd", "180 vCPU (90 core), 1,440 GB memory, 16 Local SSD disks"),
+                        ("c3d-highmem-360-lssd", "360 vCPU (180 core), 2,880 GB memory, 32 Local SSD disks")
+                    ],
+                    "High CPU": [
+                        ("c3d-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
+                        ("c3d-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
+                        ("c3d-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
+                        ("c3d-highcpu-30", "30 vCPU (15 core), 59 GB memory"),
+                        ("c3d-highcpu-60", "60 vCPU (30 core), 118 GB memory"),
+                        ("c3d-highcpu-90", "90 vCPU (45 core), 177 GB memory"),
+                        ("c3d-highcpu-180", "180 vCPU (90 core), 354 GB memory"),
+                        ("c3d-highcpu-360", "360 vCPU (180 core), 708 GB memory")
+                    ]
+                },
+                "E2": {
+                    "Shared-core": [
+                        ("e2-micro", "0.25-2 vCPU (1 shared core), 1 GB memory"),
+                        ("e2-small", "0.5-2 vCPU (1 shared core), 2 GB memory"),
+                        ("e2-medium", "1-2 vCPU (1 shared core), 4 GB memory")
+                    ],
+                    "Standard": [
+                        ("e2-standard-2", "2 vCPU (1 core), 8 GB memory"),
+                        ("e2-standard-4", "4 vCPU (2 cores), 16 GB memory"),
+                        ("e2-standard-8", "8 vCPU (4 cores), 32 GB memory"),
+                        ("e2-standard-16", "16 vCPU (8 cores), 64 GB memory"),
+                        ("e2-standard-32", "32 vCPU (16 cores), 128 GB memory")
+                    ],
+                    "High memory": [
+                        ("e2-highmem-2", "2 vCPU (1 core), 16 GB memory"),
+                        ("e2-highmem-4", "4 vCPU (2 cores), 32 GB memory"),
+                        ("e2-highmem-8", "8 vCPU (4 cores), 64 GB memory"),
+                        ("e2-highmem-16", "16 vCPU (8 cores), 128 GB memory")
+                    ],
+                    "High CPU": [
+                        ("e2-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
+                        ("e2-highcpu-4", "4 vCPU (2 cores), 4 GB memory"),
+                        ("e2-highcpu-8", "8 vCPU (4 cores), 8 GB memory"),
+                        ("e2-highcpu-16", "16 vCPU (8 cores), 16 GB memory"),
+                        ("e2-highcpu-32", "32 vCPU (16 cores), 32 GB memory")
+                    ]
+                },
+                "N2": {
+                    "Standard": [
+                        ("n2-standard-2", "2 vCPU (1 core), 8 GB memory"),
+                        ("n2-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                        ("n2-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                        ("n2-standard-16", "16 vCPU (8 core), 64 GB memory"),
+                        ("n2-standard-32", "32 vCPU (16 core), 128 GB memory"),
+                        ("n2-standard-48", "48 vCPU (24 core), 192 GB memory"),
+                        ("n2-standard-64", "64 vCPU (32 core), 256 GB memory"),
+                        ("n2-standard-80", "80 vCPU (40 core), 320 GB memory"),
+                        ("n2-standard-96", "96 vCPU (48 core), 384 GB memory"),
+                        ("n2-standard-128", "128 vCPU (64 core), 512 GB memory")
+                    ],
+                    "High memory": [
+                        ("n2-highmem-2", "2 vCPU (1 core), 16 GB memory"),
+                        ("n2-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                        ("n2-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                        ("n2-highmem-16", "16 vCPU (8 core), 128 GB memory"),
+                        ("n2-highmem-32", "32 vCPU (16 core), 256 GB memory"),
+                        ("n2-highmem-48", "48 vCPU (24 core), 384 GB memory"),
+                        ("n2-highmem-64", "64 vCPU (32 core), 512 GB memory"),
+                        ("n2-highmem-80", "80 vCPU (40 core), 640 GB memory"),
+                        ("n2-highmem-96", "96 vCPU (48 core), 768 GB memory"),
+                        ("n2-highmem-128", "128 vCPU (64 core), 864 GB memory")
+                    ],
+                    "High CPU": [
+                        ("n2-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
+                        ("n2-highcpu-4", "4 vCPU (2 core), 4 GB memory"),
+                        ("n2-highcpu-8", "8 vCPU (4 core), 8 GB memory"),
+                        ("n2-highcpu-16", "16 vCPU (8 core), 16 GB memory"),
+                        ("n2-highcpu-32", "32 vCPU (16 core), 32 GB memory"),
+                        ("n2-highcpu-48", "48 vCPU (24 core), 48 GB memory"),
+                        ("n2-highcpu-64", "64 vCPU (32 core), 64 GB memory"),
+                        ("n2-highcpu-80", "80 vCPU (40 core), 80 GB memory"),
+                        ("n2-highcpu-96", "96 vCPU (48 core), 96 GB memory")
+                    ]
+                },
+                "N2D": {
+                    "Standard": [
+                        ("n2d-standard-2", "2 vCPU (1 core), 8 GB memory"),
+                        ("n2d-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                        ("n2d-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                        ("n2d-standard-16", "16 vCPU (8 core), 64 GB memory"),
+                        ("n2d-standard-32", "32 vCPU (16 core), 128 GB memory"),
+                        ("n2d-standard-48", "48 vCPU (24 core), 192 GB memory"),
+                        ("n2d-standard-64", "64 vCPU (32 core), 256 GB memory"),
+                        ("n2d-standard-80", "80 vCPU (40 core), 320 GB memory"),
+                        ("n2d-standard-96", "96 vCPU (48 core), 384 GB memory"),
+                        ("n2d-standard-128", "128 vCPU (64 core), 512 GB memory"),
+                        ("n2d-standard-224", "224 vCPU (112 core), 896 GB memory")
+                    ],
+                    "High memory": [
+                        ("n2d-highmem-2", "2 vCPU (1 core), 16 GB memory"),
+                        ("n2d-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                        ("n2d-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                        ("n2d-highmem-16", "16 vCPU (8 core), 128 GB memory"),
+                        ("n2d-highmem-32", "32 vCPU (16 core), 256 GB memory"),
+                        ("n2d-highmem-48", "48 vCPU (24 core), 384 GB memory"),
+                        ("n2d-highmem-64", "64 vCPU (32 core), 512 GB memory"),
+                        ("n2d-highmem-80", "80 vCPU (40 core), 640 GB memory"),
+                        ("n2d-highmem-96", "96 vCPU (48 core), 768 GB memory")
+                    ],
+                    "High CPU": [
+                        ("n2d-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
+                        ("n2d-highcpu-4", "4 vCPU (2 core), 4 GB memory"),
+                        ("n2d-highcpu-8", "8 vCPU (4 core), 8 GB memory"),
+                        ("n2d-highcpu-16", "16 vCPU (8 core), 16 GB memory"),
+                        ("n2d-highcpu-32", "32 vCPU (16 core), 32 GB memory"),
+                        ("n2d-highcpu-48", "48 vCPU (24 core), 48 GB memory"),
+                        ("n2d-highcpu-64", "64 vCPU (32 core), 64 GB memory"),
+                        ("n2d-highcpu-80", "80 vCPU (40 core), 80 GB memory"),
+                        ("n2d-highcpu-96", "96 vCPU (48 core), 96 GB memory"),
+                        ("n2d-highcpu-128", "128 vCPU (64 core), 128 GB memory"),
+                        ("n2d-highcpu-224", "224 vCPU (112 core), 224 GB memory")
+                    ]
+                },
+                "T2A": {
+                    "Standard": [
+                        ("t2a-standard-1", "1 vCPU, 4 GB memory"),
+                        ("t2a-standard-2", "2 vCPU, 8 GB memory"),
+                        ("t2a-standard-4", "4 vCPU, 16 GB memory"),
+                        ("t2a-standard-8", "8 vCPU, 32 GB memory"),
+                        ("t2a-standard-16", "16 vCPU, 64 GB memory"),
+                        ("t2a-standard-32", "32 vCPU, 128 GB memory"),
+                        ("t2a-standard-48", "48 vCPU, 192 GB memory")
+                    ]
+                },
+                "T2D": {
+                    "Standard": [
+                        ("t2d-standard-1", "1 vCPU, 4 GB memory"),
+                        ("t2d-standard-2", "2 vCPU, 8 GB memory"),
+                        ("t2d-standard-4", "4 vCPU, 16 GB memory"),
+                        ("t2d-standard-8", "8 vCPU, 32 GB memory"),
+                        ("t2d-standard-16", "16 vCPU, 64 GB memory"),
+                        ("t2d-standard-32", "32 vCPU, 128 GB memory"),
+                        ("t2d-standard-48", "48 vCPU, 192 GB memory"),
+                        ("t2d-standard-60", "60 vCPU, 240 GB memory")
+                    ]
+                },
+                "N1": {
+                    "Shared-core": [
+                        ("f1-micro", "0.25-1 vCPU (1 shared core), 614 MB memory"),
+                        ("g1-small", "0.5-1 vCPU (1 shared core), 1.7 GB memory")
+                    ],
+                    "Standard": [
+                        ("n1-standard-1", "1 vCPU, 3.75 GB memory"),
+                        ("n1-standard-2", "2 vCPU (1 core), 7.5 GB memory"),
+                        ("n1-standard-4", "4 vCPU (2 core), 15 GB memory"),
+                        ("n1-standard-8", "8 vCPU (4 core), 30 GB memory"),
+                        ("n1-standard-16", "16 vCPU (8 core), 60 GB memory"),
+                        ("n1-standard-32", "32 vCPU (16 core), 120 GB memory"),
+                        ("n1-standard-64", "64 vCPU (32 core), 240 GB memory"),
+                        ("n1-standard-96", "96 vCPU (48 core), 360 GB memory")
+                    ],
+                    "High memory": [
+                        ("n1-highmem-2", "2 vCPU (1 core), 13 GB memory"),
+                        ("n1-highmem-4", "4 vCPU (2 core), 26 GB memory"),
+                        ("n1-highmem-8", "8 vCPU (4 core), 52 GB memory"),
+                        ("n1-highmem-16", "16 vCPU (8 core), 104 GB memory"),
+                        ("n1-highmem-32", "32 vCPU (16 core), 208 GB memory"),
+                        ("n1-highmem-64", "64 vCPU (32 core), 416 GB memory"),
+                        ("n1-highmem-96", "96 vCPU (48 core), 624 GB memory")
+                    ],
+                    "High CPU": [
+                        ("n1-highcpu-2", "2 vCPU (1 core), 1.8 GB memory"),
+                        ("n1-highcpu-4", "4 vCPU (2 core), 3.6 GB memory"),
+                        ("n1-highcpu-8", "8 vCPU (4 core), 7.2 GB memory"),
+                        ("n1-highcpu-16", "16 vCPU (8 core), 14.4 GB memory"),
+                        ("n1-highcpu-32", "32 vCPU (16 core), 28.8 GB memory"),
+                        ("n1-highcpu-64", "64 vCPU (32 core), 57.6 GB memory"),
+                        ("n1-highcpu-96", "96 vCPU (48 core), 86.4 GB memory")
+                    ]
+                }
+            }
+            return presets.get(series, {})
+
         # ---- Machine type presets (General purpose) ----
         def gp_series_catalog() -> Dict[str, Dict[str, Dict[str, list]]]:
             """Return General purpose series with profiles and machine presets."""
             return {
+                "C4": {
+                    "Standard": {
+                        "presets": [
+                            "c4-standard-2", "c4-standard-4", "c4-standard-8", "c4-standard-16", 
+                            "c4-standard-32", "c4-standard-64", "c4-standard-96", "c4-standard-128",
+                            "c4-standard-160", "c4-standard-192", "c4-standard-224", "c4-standard-256", "c4-standard-288"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "c4-highmem-2", "c4-highmem-4", "c4-highmem-8", "c4-highmem-16",
+                            "c4-highmem-32", "c4-highmem-64", "c4-highmem-96", "c4-highmem-128",
+                            "c4-highmem-160", "c4-highmem-192", "c4-highmem-224", "c4-highmem-256", "c4-highmem-288"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "c4-highcpu-2", "c4-highcpu-4", "c4-highcpu-8", "c4-highcpu-16",
+                            "c4-highcpu-32", "c4-highcpu-64", "c4-highcpu-96", "c4-highcpu-128",
+                            "c4-highcpu-160", "c4-highcpu-192", "c4-highcpu-224", "c4-highcpu-256", "c4-highcpu-288"
+                        ]
+                    }
+                },
+                "C4A": {
+                    "Standard": {
+                        "presets": [
+                            "c4a-standard-1", "c4a-standard-2", "c4a-standard-4", "c4a-standard-8",
+                            "c4a-standard-16", "c4a-standard-32", "c4a-standard-48", "c4a-standard-64", "c4a-standard-72"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "c4a-highmem-1", "c4a-highmem-2", "c4a-highmem-4", "c4a-highmem-8",
+                            "c4a-highmem-16", "c4a-highmem-32", "c4a-highmem-48", "c4a-highmem-64", "c4a-highmem-72"
+                        ]
+                    }
+                },
+                "C4D": {
+                    "Standard": {
+                        "presets": [
+                            "c4d-standard-2", "c4d-standard-4", "c4d-standard-8", "c4d-standard-16",
+                            "c4d-standard-32", "c4d-standard-64", "c4d-standard-96", "c4d-standard-128",
+                            "c4d-standard-160", "c4d-standard-192", "c4d-standard-224", "c4d-standard-256",
+                            "c4d-standard-288", "c4d-standard-320", "c4d-standard-352", "c4d-standard-384"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "c4d-highmem-2", "c4d-highmem-4", "c4d-highmem-8", "c4d-highmem-16",
+                            "c4d-highmem-32", "c4d-highmem-64", "c4d-highmem-96", "c4d-highmem-128",
+                            "c4d-highmem-160", "c4d-highmem-192", "c4d-highmem-224", "c4d-highmem-256",
+                            "c4d-highmem-288", "c4d-highmem-320", "c4d-highmem-352", "c4d-highmem-384"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "c4d-highcpu-2", "c4d-highcpu-4", "c4d-highcpu-8", "c4d-highcpu-16",
+                            "c4d-highcpu-32", "c4d-highcpu-64", "c4d-highcpu-96", "c4d-highcpu-128",
+                            "c4d-highcpu-160", "c4d-highcpu-192", "c4d-highcpu-224", "c4d-highcpu-256",
+                            "c4d-highcpu-288", "c4d-highcpu-320", "c4d-highcpu-352", "c4d-highcpu-384"
+                        ]
+                    }
+                },
+                "N4": {
+                    "Standard": {
+                        "presets": [
+                            "n4-standard-2", "n4-standard-4", "n4-standard-8", "n4-standard-16",
+                            "n4-standard-32", "n4-standard-64", "n4-standard-80"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "n4-highmem-2", "n4-highmem-4", "n4-highmem-8", "n4-highmem-16",
+                            "n4-highmem-32", "n4-highmem-64", "n4-highmem-80"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "n4-highcpu-2", "n4-highcpu-4", "n4-highcpu-8", "n4-highcpu-16",
+                            "n4-highcpu-32", "n4-highcpu-64", "n4-highcpu-80"
+                        ]
+                    }
+                },
+                "C3": {
+                    "Standard": {
+                        "presets": [
+                            "c3-standard-4", "c3-standard-8", "c3-standard-22", "c3-standard-44",
+                            "c3-standard-88", "c3-standard-176", "c3-standard-192"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "c3-highmem-4", "c3-highmem-8", "c3-highmem-22", "c3-highmem-44",
+                            "c3-highmem-88", "c3-highmem-176", "c3-highmem-192"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "c3-highcpu-4", "c3-highcpu-8", "c3-highcpu-22", "c3-highcpu-44",
+                            "c3-highcpu-88", "c3-highcpu-176", "c3-highcpu-192"
+                        ]
+                    }
+                },
                 "C3D": {
                     "Standard": {
                         "presets": [
@@ -2183,16 +2770,100 @@ def project_builder():
                     }
                 },
                 "E2": {
-                    "Standard": {"presets": ["e2-micro","e2-small","e2-medium","e2-standard-2","e2-standard-4","e2-standard-8","e2-standard-16"]}
+                    "Standard": {
+                        "presets": [
+                            "e2-micro", "e2-small", "e2-medium", "e2-standard-2", "e2-standard-4", 
+                            "e2-standard-8", "e2-standard-16", "e2-standard-32"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "e2-highmem-2", "e2-highmem-4", "e2-highmem-8", "e2-highmem-16"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "e2-highcpu-2", "e2-highcpu-4", "e2-highcpu-8", "e2-highcpu-16", "e2-highcpu-32"
+                        ]
+                    }
                 },
                 "N2": {
-                    "Standard": {"presets": ["n2-standard-2","n2-standard-4","n2-standard-8","n2-standard-16","n2-standard-32"]}
+                    "Standard": {
+                        "presets": [
+                            "n2-standard-2", "n2-standard-4", "n2-standard-8", "n2-standard-16", 
+                            "n2-standard-32", "n2-standard-48", "n2-standard-64", "n2-standard-80", 
+                            "n2-standard-96", "n2-standard-128"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "n2-highmem-2", "n2-highmem-4", "n2-highmem-8", "n2-highmem-16",
+                            "n2-highmem-32", "n2-highmem-48", "n2-highmem-64", "n2-highmem-80", "n2-highmem-96", "n2-highmem-128"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "n2-highcpu-2", "n2-highcpu-4", "n2-highcpu-8", "n2-highcpu-16",
+                            "n2-highcpu-32", "n2-highcpu-48", "n2-highcpu-64", "n2-highcpu-80", "n2-highcpu-96", "n2-highcpu-128"
+                        ]
+                    }
                 },
                 "N2D": {
-                    "Standard": {"presets": ["n2d-standard-2","n2d-standard-4","n2d-standard-8","n2d-standard-16","n2d-standard-32"]}
+                    "Standard": {
+                        "presets": [
+                            "n2d-standard-2", "n2d-standard-4", "n2d-standard-8", "n2d-standard-16", 
+                            "n2d-standard-32", "n2d-standard-48", "n2d-standard-64", "n2d-standard-80", 
+                            "n2d-standard-96", "n2d-standard-128", "n2d-standard-224"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "n2d-highmem-2", "n2d-highmem-4", "n2d-highmem-8", "n2d-highmem-16",
+                            "n2d-highmem-32", "n2d-highmem-48", "n2d-highmem-64", "n2d-highmem-80", "n2d-highmem-96", "n2d-highmem-128", "n2d-highmem-224"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "n2d-highcpu-2", "n2d-highcpu-4", "n2d-highcpu-8", "n2d-highcpu-16",
+                            "n2d-highcpu-32", "n2d-highcpu-48", "n2d-highcpu-64", "n2d-highcpu-80", "n2d-highcpu-96", "n2d-highcpu-128", "n2d-highcpu-224"
+                        ]
+                    }
+                },
+                "T2A": {
+                    "Standard": {
+                        "presets": [
+                            "t2a-standard-1", "t2a-standard-2", "t2a-standard-4", "t2a-standard-8",
+                            "t2a-standard-16", "t2a-standard-32", "t2a-standard-48"
+                        ]
+                    }
+                },
+                "T2D": {
+                    "Standard": {
+                        "presets": [
+                            "t2d-standard-1", "t2d-standard-2", "t2d-standard-4", "t2d-standard-8",
+                            "t2d-standard-16", "t2d-standard-32", "t2d-standard-48", "t2d-standard-60"
+                        ]
+                    }
                 },
                 "N1": {
-                    "Standard": {"presets": ["n1-standard-1","n1-standard-2","n1-standard-4","n1-standard-8","n1-standard-16"]}
+                    "Standard": {
+                        "presets": [
+                            "n1-standard-1", "n1-standard-2", "n1-standard-4", "n1-standard-8", 
+                            "n1-standard-16", "n1-standard-32", "n1-standard-64", "n1-standard-96"
+                        ]
+                    },
+                    "High memory": {
+                        "presets": [
+                            "n1-highmem-2", "n1-highmem-4", "n1-highmem-8", "n1-highmem-16",
+                            "n1-highmem-32", "n1-highmem-64", "n1-highmem-96"
+                        ]
+                    },
+                    "High CPU": {
+                        "presets": [
+                            "n1-highcpu-2", "n1-highcpu-4", "n1-highcpu-8", "n1-highcpu-16",
+                            "n1-highcpu-32", "n1-highcpu-64", "n1-highcpu-96"
+                        ]
+                    }
                 }
             }
 
@@ -2231,7 +2902,7 @@ def project_builder():
                     st.markdown(f"**Machine type**: `{new_type or 'not set'}`")
                     if st.button("Change machine type", key=f"vm_change_type_{i}"):
                         st.session_state[f"open_vm_adv_{i}"] = True
-                        st.rerun()
+                        # Don't rerun here - let the UI update naturally
                 with col5:
                     if st.button("🗑️", key=f"del_vm_{i}"):
                         st.session_state.compute_instances.pop(i)
@@ -2242,28 +2913,110 @@ def project_builder():
                     st.markdown("**Machine Type Selection**")
                     tabs = st.tabs(["General purpose", "Compute optimized", "Memory optimized", "Storage optimized", "GPUs"])
                     with tabs[0]:
-                        catalog = gp_series_catalog()
-                        series = list(catalog.keys())
-                        sel_series = st.selectbox("Series", series, index=series.index('E2') if 'E2' in series else 0, key=f"vm_series_{i}")
-                        # Preset/Custom
-                        sub_tabs = st.tabs(["Preset", "Custom"])
+                        # Machine Series Selection Table
+                        st.markdown("**Select Machine Series:**")
+                        series_data = get_machine_series_data()
+                        df = st.dataframe(
+                            series_data,
+                            use_container_width=True,
+                            hide_index=True,
+                            on_select="rerun",
+                            selection_mode="single-row"
+                        )
+                        
+                        # Get selected series
+                        selected_series = "E2"  # Default
+                        if df.selection.rows:
+                            selected_series = series_data[df.selection.rows[0]]["Series"]
+                        
+                        # Update session state if series changed
+                        if f"selected_series_{i}" not in st.session_state:
+                            st.session_state[f"selected_series_{i}"] = selected_series
+                        elif st.session_state[f"selected_series_{i}"] != selected_series:
+                            st.session_state[f"selected_series_{i}"] = selected_series
+                            # Don't rerun here - let the UI update naturally
+                        
+                        st.markdown(f"**Selected Series: {selected_series}**")
+                        
+                        # Get presets for selected series
+                        series_presets = get_series_presets(selected_series)
+                        
+                        # Check if series supports custom machine types
+                        custom_enabled_series = ["N4", "E2", "N2", "N2D", "N1"]
+                        supports_custom = selected_series in custom_enabled_series
+                        
+                        # Create tabs based on series support
+                        if supports_custom:
+                            sub_tabs = st.tabs(["Preset", "Custom"])
+                        else:
+                            sub_tabs = st.tabs(["Preset"])
+                            
                         with sub_tabs[0]:
-                            families = ["Shared-core", "Standard", "High memory", "High CPU"]
-                            fam = st.radio("instance sizes", families, horizontal=True, key=f"vm_e2_family_{i}")
-                            e2_family_map = {
-                                "Shared-core": [("e2-medium", "1-2 vCPU (1 shared core), 4 GB memory"),("e2-micro", "0.25-2 vCPU (1 shared core), 1 GB memory"),("e2-small", "0.5-2 vCPU (1 shared core), 2 GB memory")],
-                                "Standard": [("e2-standard-2","2 vCPU (1 core), 8 GB memory"),("e2-standard-4","4 vCPU (2 core), 16 GB memory"),("e2-standard-8","8 vCPU (4 core), 32 GB memory"),("e2-standard-16","16 vCPU (8 core), 64 GB memory"),("e2-standard-32","32 vCPU (16 core), 128 GB memory")],
-                                "High memory": [("e2-highmem-2","2 vCPU (1 core), 16 GB memory"),("e2-highmem-4","4 vCPU (2 core), 32 GB memory"),("e2-highmem-8","8 vCPU (4 core), 64 GB memory"),("e2-highmem-16","16 vCPU (8 core), 128 GB memory")],
-                                "High CPU": [("e2-highcpu-2","2 vCPU (1 core), 2 GB memory"),("e2-highcpu-4","4 vCPU (2 core), 4 GB memory"),("e2-highcpu-8","8 vCPU (4 core), 8 GB memory"),("e2-highcpu-16","16 vCPU (8 core), 16 GB memory"),("e2-highcpu-32","32 vCPU (16 core), 32 GB memory")],
-                            }
-                            opts = [f"{name} – {desc}" for name, desc in e2_family_map[fam]]
-                            sel_opt = st.selectbox("", opts, index=0, label_visibility="collapsed", key=f"vm_e2_opt_{i}")
-                            chosen_mt = e2_family_map[fam][opts.index(sel_opt)][0]
-                            if chosen_mt != st.session_state.compute_instances[i].get('machine_type'):
-                                st.session_state.compute_instances[i]['machine_type'] = chosen_mt
-                                st.rerun()
-                        with sub_tabs[1]:
-                            st.info("Custom machine type coming next (manual vCPU & memory sliders).")
+                            if series_presets:
+                                families = list(series_presets.keys())
+                                fam = st.radio("Instance sizes", families, horizontal=True, key=f"vm_family_{i}")
+                                
+                                if fam in series_presets:
+                                    opts = [f"{name} – {desc}" for name, desc in series_presets[fam]]
+                                    sel_opt = st.selectbox("Machine Type", opts, index=0, key=f"vm_opt_{i}")
+                                    chosen_mt = series_presets[fam][opts.index(sel_opt)][0]
+                                    
+                                    if chosen_mt != st.session_state.compute_instances[i].get('machine_type'):
+                                        st.session_state.compute_instances[i]['machine_type'] = chosen_mt
+                                        # Don't rerun here - let the UI update naturally
+                            else:
+                                st.info(f"No presets available for {selected_series} series.")
+                                
+                        if supports_custom:
+                            with sub_tabs[1]:
+                                st.warning("⚠️ Creating a custom machine incurs additional costs")
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    custom_vcpu = st.slider(
+                                        "Cores", 
+                                        min_value=1, 
+                                        max_value=96, 
+                                        value=2, 
+                                        key=f"custom_vcpu_{i}",
+                                        help="Number of vCPUs"
+                                    )
+                                with col2:
+                                    custom_memory = st.slider(
+                                        "Memory (GB)", 
+                                        min_value=1.0, 
+                                        max_value=6.5, 
+                                        value=1.0, 
+                                        step=0.1, 
+                                        key=f"custom_memory_{i}",
+                                        help="Memory in GB"
+                                    )
+                                
+                                extend_memory = st.checkbox(
+                                    "Extend Memory", 
+                                    value=False, 
+                                    key=f"extend_memory_{i}",
+                                    help="Allow memory to exceed 6.5 GB per vCPU"
+                                )
+                                
+                                if extend_memory:
+                                    max_memory = min(6.5 * custom_vcpu, 624.0)  # Max 624 GB for N1
+                                    custom_memory = st.slider(
+                                        "Extended Memory (GB)", 
+                                        min_value=1.0, 
+                                        max_value=max_memory, 
+                                        value=custom_memory, 
+                                        step=0.1, 
+                                        key=f"extended_memory_{i}",
+                                        help=f"Extended memory up to {max_memory:.1f} GB"
+                                    )
+                                
+                                # Generate custom machine type name
+                                custom_mt = f"custom-{selected_series.lower()}-{custom_vcpu}-{int(custom_memory * 1024)}"
+                                
+                                if custom_mt != st.session_state.compute_instances[i].get('machine_type'):
+                                    st.session_state.compute_instances[i]['machine_type'] = custom_mt
+                                    # Don't rerun here - let the UI update naturally
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         new_image = st.text_input("Boot Image", value=vm.get('image', 'debian-cloud/debian-11'), key=f"vm_image_{i}")
@@ -2412,7 +3165,7 @@ def project_builder():
             st.markdown(f"**Machine type**: `{st.session_state.new_vm_machine_type}`")
             if st.button("Change machine type", key="new_vm_change_type"):
                 st.session_state["open_new_vm_adv"] = True
-                st.rerun()
+                # Don't rerun here - let the UI update naturally
         with col5:
             add_clicked = st.button("➕ Add", key="add_vm")
 
@@ -2495,28 +3248,111 @@ def project_builder():
             st.markdown("**Machine Type Selection**")
             tabs = st.tabs(["General purpose", "Compute optimized", "Memory optimized", "Storage optimized", "GPUs"])
             with tabs[0]:
-                catalog = gp_series_catalog()
-                series = list(catalog.keys())
-                sel_series = st.selectbox("Series", series, index=series.index('E2') if 'E2' in series else 0, key="new_vm_series")
-                # Preset/Custom
-                sub_tabs = st.tabs(["Preset", "Custom"])
+                # Machine Series Selection Table
+                st.markdown("**Select Machine Series:**")
+                series_data = get_machine_series_data()
+                df = st.dataframe(
+                    series_data,
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="new_vm_series_table"
+                )
+                
+                # Get selected series
+                selected_series = "E2"  # Default
+                if df.selection.rows:
+                    selected_series = series_data[df.selection.rows[0]]["Series"]
+                
+                # Update session state if series changed
+                if "new_vm_selected_series" not in st.session_state:
+                    st.session_state["new_vm_selected_series"] = selected_series
+                elif st.session_state["new_vm_selected_series"] != selected_series:
+                    st.session_state["new_vm_selected_series"] = selected_series
+                    # Don't rerun here - let the UI update naturally
+                
+                st.markdown(f"**Selected Series: {selected_series}**")
+                
+                # Get presets for selected series
+                series_presets = get_series_presets(selected_series)
+                
+                # Check if series supports custom machine types
+                custom_enabled_series = ["N4", "E2", "N2", "N2D", "N1"]
+                supports_custom = selected_series in custom_enabled_series
+                
+                # Create tabs based on series support
+                if supports_custom:
+                    sub_tabs = st.tabs(["Preset", "Custom"])
+                else:
+                    sub_tabs = st.tabs(["Preset"])
+                    
                 with sub_tabs[0]:
-                    families = ["Shared-core", "Standard", "High memory", "High CPU"]
-                    fam = st.radio("instance sizes", families, horizontal=True, key="new_vm_e2_family")
-                    e2_family_map = {
-                        "Shared-core": [("e2-medium", "1-2 vCPU (1 shared core), 4 GB memory"),("e2-micro", "0.25-2 vCPU (1 shared core), 1 GB memory"),("e2-small", "0.5-2 vCPU (1 shared core), 2 GB memory")],
-                        "Standard": [("e2-standard-2","2 vCPU (1 core), 8 GB memory"),("e2-standard-4","4 vCPU (2 core), 16 GB memory"),("e2-standard-8","8 vCPU (4 core), 32 GB memory"),("e2-standard-16","16 vCPU (8 core), 64 GB memory"),("e2-standard-32","32 vCPU (16 core), 128 GB memory")],
-                        "High memory": [("e2-highmem-2","2 vCPU (1 core), 16 GB memory"),("e2-highmem-4","4 vCPU (2 core), 32 GB memory"),("e2-highmem-8","8 vCPU (4 core), 64 GB memory"),("e2-highmem-16","16 vCPU (8 core), 128 GB memory")],
-                        "High CPU": [("e2-highcpu-2","2 vCPU (1 core), 2 GB memory"),("e2-highcpu-4","4 vCPU (2 core), 4 GB memory"),("e2-highcpu-8","8 vCPU (4 core), 8 GB memory"),("e2-highcpu-16","16 vCPU (8 core), 16 GB memory"),("e2-highcpu-32","32 vCPU (16 core), 32 GB memory")],
-                    }
-                    opts = [f"{name} – {desc}" for name, desc in e2_family_map[fam]]
-                    sel_opt = st.selectbox("", opts, index=0, label_visibility="collapsed", key="new_vm_e2_opt")
-                    chosen_mt = e2_family_map[fam][opts.index(sel_opt)][0]
-                    if chosen_mt != st.session_state.new_vm_machine_type:
-                        st.session_state.new_vm_machine_type = chosen_mt
-                        st.rerun()
-                with sub_tabs[1]:
-                    st.info("Custom machine type coming next (manual vCPU & memory sliders).")
+                    if series_presets:
+                        families = list(series_presets.keys())
+                        fam = st.radio("Instance sizes", families, horizontal=True, key="new_vm_family")
+                        
+                        if fam in series_presets:
+                            opts = [f"{name} – {desc}" for name, desc in series_presets[fam]]
+                            sel_opt = st.selectbox("Machine Type", opts, index=0, key="new_vm_opt")
+                            chosen_mt = series_presets[fam][opts.index(sel_opt)][0]
+                            
+                            if chosen_mt != st.session_state.new_vm_machine_type:
+                                st.session_state.new_vm_machine_type = chosen_mt
+                                # Don't rerun here - let the UI update naturally
+                    else:
+                        st.info(f"No presets available for {selected_series} series.")
+                        
+                if supports_custom:
+                    with sub_tabs[1]:
+                        st.warning("⚠️ Creating a custom machine incurs additional costs")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            custom_vcpu = st.slider(
+                                "Cores", 
+                                min_value=1, 
+                                max_value=96, 
+                                value=2, 
+                                key="new_custom_vcpu",
+                                help="Number of vCPUs"
+                            )
+                        with col2:
+                            custom_memory = st.slider(
+                                "Memory (GB)", 
+                                min_value=1.0, 
+                                max_value=6.5, 
+                                value=1.0, 
+                                step=0.1, 
+                                key="new_custom_memory",
+                                help="Memory in GB"
+                            )
+                        
+                        extend_memory = st.checkbox(
+                            "Extend Memory", 
+                            value=False, 
+                            key="new_extend_memory",
+                            help="Allow memory to exceed 6.5 GB per vCPU"
+                        )
+                        
+                        if extend_memory:
+                            max_memory = min(6.5 * custom_vcpu, 624.0)  # Max 624 GB for N1
+                            custom_memory = st.slider(
+                                "Extended Memory (GB)", 
+                                min_value=1.0, 
+                                max_value=max_memory, 
+                                value=custom_memory, 
+                                step=0.1, 
+                                key="new_extended_memory",
+                                help=f"Extended memory up to {max_memory:.1f} GB"
+                            )
+                        
+                        # Generate custom machine type name
+                        custom_mt = f"custom-{selected_series.lower()}-{custom_vcpu}-{int(custom_memory * 1024)}"
+                        
+                        if custom_mt != st.session_state.new_vm_machine_type:
+                            st.session_state.new_vm_machine_type = custom_mt
+                            # Don't rerun here - let the UI update naturally
 
         if add_clicked and vm_name:
             def parse_json_default(s, default):
