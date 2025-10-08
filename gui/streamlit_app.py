@@ -45,7 +45,10 @@ def generate_standalone_main_tf(config: dict, create_project: bool = True) -> st
     apis = config.get("apis", [])
     resources = config.get("resources", {})
     
-    content = '''terraform {
+    content = '''# Authentication: Credentials are provided via GOOGLE_APPLICATION_CREDENTIALS environment variable
+# The credentials file is automatically used by the Google provider for authentication
+
+terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -54,8 +57,12 @@ def generate_standalone_main_tf(config: dict, create_project: bool = True) -> st
   }
 }
 
+# Google Cloud Provider Configuration
+# Authentication: Uses credentials from GOOGLE_APPLICATION_CREDENTIALS environment variable
+# This is set automatically when using uploaded credentials in the GUI
 provider "google" {
   project = var.project_id
+  # credentials = file("path/to/credentials.json")  # Alternative: specify credentials file directly
 }
 
 '''
@@ -445,7 +452,7 @@ resource "google_secret_manager_secret_version" "secret_version_{i}" {{
     return content
 
 def main():
-    st.title("☁️ GCP Project Creator")
+    st.title("🏗️ Project Builder")
     st.markdown("Create and deploy Google Cloud Platform projects with a simple GUI interface")
     
     # Sidebar for navigation
@@ -470,8 +477,258 @@ def main():
         help_examples()
 
 def project_builder():
-    st.header("🏗️ Project Builder")
     st.markdown("Configure your GCP project step by step")
+    
+    # Initialize session state for credentials
+    if 'credentials_file' not in st.session_state:
+        st.session_state.credentials_file = None
+    if 'credentials_path' not in st.session_state:
+        st.session_state.credentials_path = None
+    if 'project_id' not in st.session_state:
+        st.session_state.project_id = ""
+    
+    def test_gcp_connection():
+        """Test GCP connection using the uploaded credentials"""
+        if not st.session_state.credentials_file:
+            st.error("❌ No credentials uploaded")
+            return
+        
+        try:
+            # First check if gcloud is available
+            try:
+                gcloud_check = subprocess.run(
+                    ["gcloud", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if gcloud_check.returncode != 0:
+                    st.error("❌ Google Cloud SDK (gcloud) is not installed or not in PATH")
+                    st.info("💡 Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install")
+                    return
+            except FileNotFoundError:
+                st.error("❌ Google Cloud SDK (gcloud) is not installed or not in PATH")
+                st.info("💡 Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install")
+                return
+            except Exception as e:
+                st.error(f"❌ Error checking gcloud installation: {str(e)}")
+                return
+            
+            st.success("✅ Google Cloud SDK is available")
+            
+            # Create a temporary credentials file
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                f.write(st.session_state.credentials_file)
+                temp_creds_path = f.name
+            
+            # Set environment variable for authentication
+            env = os.environ.copy()
+            env['GOOGLE_APPLICATION_CREDENTIALS'] = temp_creds_path
+            
+            # Test with gcloud command
+            test_cmd = ['gcloud', 'auth', 'activate-service-account', '--key-file', temp_creds_path]
+            
+            with st.spinner("Testing GCP connection..."):
+                result = subprocess.run(
+                    test_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    env=env
+                )
+                
+                if result.returncode == 0:
+                    # Test project access
+                    project_cmd = ['gcloud', 'config', 'get-value', 'project']
+                    project_result = subprocess.run(
+                        project_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        env=env
+                    )
+                    
+                    if project_result.returncode == 0:
+                        current_project = project_result.stdout.strip()
+                        st.success(f"✅ Connection successful! Current project: {current_project}")
+                    else:
+                        st.success("✅ Authentication successful!")
+                        
+                    # Show credentials info
+                    try:
+                        creds_json = json.loads(st.session_state.credentials_file)
+                        service_account = creds_json.get('client_email', 'Unknown')
+                        project_id = creds_json.get('project_id', 'Unknown')
+                        st.info(f"🔑 Service Account: {service_account}")
+                        st.info(f"📋 Project ID: {project_id}")
+                    except:
+                        pass
+                        
+                else:
+                    st.error(f"❌ Connection failed: {result.stderr}")
+            
+            # Clean up temporary file
+            os.unlink(temp_creds_path)
+            
+        except Exception as e:
+            st.error(f"❌ Error testing connection: {str(e)}")
+    
+    # Credentials Section (Optional)
+    with st.expander("🔑 GCP Credentials (Optional)", expanded=True):
+        st.markdown("**Optional**: Upload your GCP service account credentials to enable automatic deployment. You can also use existing `gcloud` authentication.")
+        
+        # Choose input method
+        input_method = st.radio(
+            "Choose how to provide credentials:",
+            ["📁 Upload JSON file", "📝 Paste JSON content"],
+            key="credentials_input_method"
+        )
+        
+        credentials_content = None
+        credentials_json = None
+        
+        if input_method == "📁 Upload JSON file":
+            # File uploader for credentials.json
+            uploaded_file = st.file_uploader(
+                "Upload credentials.json",
+                type=['json'],
+                help="Upload your GCP service account credentials JSON file (optional)",
+                key="credentials_uploader"
+            )
+            
+            if uploaded_file is not None:
+                try:
+                    credentials_content = uploaded_file.read().decode('utf-8')
+                    credentials_json = json.loads(credentials_content)
+                except json.JSONDecodeError:
+                    st.error("❌ Invalid JSON file. Please upload a valid credentials.json file.")
+                except Exception as e:
+                    st.error(f"❌ Error reading file: {str(e)}")
+        
+        else:  # Paste JSON content
+            st.markdown("**Paste your credentials JSON content below:**")
+            json_text = st.text_area(
+                "Credentials JSON",
+                height=200,
+                placeholder='{\n  "type": "service_account",\n  "project_id": "your-project-id",\n  "private_key_id": "...",\n  "private_key": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n",\n  "client_email": "your-service-account@your-project.iam.gserviceaccount.com",\n  "client_id": "...",\n  "auth_uri": "https://accounts.google.com/o/oauth2/auth",\n  "token_uri": "https://oauth2.googleapis.com/token",\n  ...\n}',
+                help="Paste the complete JSON content from your credentials file",
+                key="credentials_json_paste"
+            )
+            
+            if json_text.strip():
+                try:
+                    credentials_json = json.loads(json_text)
+                    credentials_content = json_text
+                except json.JSONDecodeError as e:
+                    st.error(f"❌ Invalid JSON format: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Error parsing JSON: {str(e)}")
+        
+        # Process credentials if provided
+        if credentials_json is not None:
+            # Validate that it looks like a service account key
+            required_fields = ['type', 'project_id', 'private_key', 'client_email']
+            if all(field in credentials_json for field in required_fields):
+                if credentials_json.get('type') == 'service_account':
+                    st.success("✅ Valid service account credentials!")
+                    
+                    # Store credentials in session state
+                    st.session_state.credentials_file = credentials_content
+                    if input_method == "📁 Upload JSON file" and uploaded_file is not None:
+                        st.session_state.credentials_path = f"credentials_{uploaded_file.name}"
+                    else:
+                        st.session_state.credentials_path = "credentials_pasted.json"
+                    
+                    # Auto-populate Project ID from credentials
+                    cred_project_id = credentials_json.get('project_id', '')
+                    if cred_project_id:
+                        st.session_state.project_id = cred_project_id
+                    
+                    # Display project info from credentials
+                    client_email = credentials_json.get('client_email', 'Unknown')
+                    
+                    st.info(f"**Project ID**: {cred_project_id}")
+                    st.info(f"**Service Account**: {client_email}")
+                    st.success(f"✅ Project ID automatically set: **{cred_project_id}**")
+                else:
+                    st.error("❌ Invalid credentials. Expected 'service_account' type.")
+            else:
+                missing_fields = [field for field in required_fields if field not in credentials_json]
+                st.error(f"❌ Invalid credentials. Missing fields: {', '.join(missing_fields)}")
+        
+        # Show current credentials status
+        if st.session_state.credentials_file:
+            st.success("🔑 Credentials loaded successfully")
+            
+            # Action buttons
+            col1, col2, col3 = st.columns([1, 1, 1])
+            
+            with col1:
+                if st.button("🔄 Test Connection", type="secondary"):
+                    test_gcp_connection()
+            
+            with col2:
+                if st.button("💾 Save Credentials", type="primary"):
+                    # Save credentials to a secure location
+                    credentials_file_path = project_root / st.session_state.credentials_path
+                    with open(credentials_file_path, 'w') as f:
+                        f.write(st.session_state.credentials_file)
+                    
+                    st.success("✅ Credentials saved successfully!")
+                    st.balloons()
+            
+            with col3:
+                if st.button("🗑️ Remove", type="secondary"):
+                    st.session_state.credentials_file = None
+                    st.session_state.credentials_path = None
+                    st.rerun()
+        else:
+            st.info("ℹ️ No credentials uploaded. You can use existing `gcloud` authentication or upload credentials later.")
+    
+    # Help section for credentials
+    with st.expander("📚 Authentication Options"):
+        st.markdown("""
+        ### 🔑 Authentication Methods
+        
+        You have **two options** for GCP authentication:
+        
+        #### Option 1: Upload Credentials (Recommended for GUI)
+        1. **Go to Google Cloud Console**: https://console.cloud.google.com/
+        2. **Select your project** (or create a new one)
+        3. **Navigate to IAM & Admin** → **Service Accounts**
+        4. **Create a new service account** or use an existing one
+        5. **Create a key**:
+           - Click on the service account
+           - Go to the "Keys" tab
+           - Click "Add Key" → "Create new key"
+           - Choose "JSON" format
+           - Download the file (usually named something like `project-name-xxxxx.json`)
+        6. **Upload the downloaded file** using the file uploader above
+        
+        #### Option 2: Use Existing gcloud Authentication
+        If you already have `gcloud` configured on your system:
+        ```bash
+        gcloud auth login
+        gcloud config set project YOUR_PROJECT_ID
+        ```
+        
+        ### 🔐 Required Permissions
+        
+        Your service account needs the following roles for full functionality:
+        - **Editor** or **Owner** (for creating resources)
+        - **Service Account User** (for using service accounts)
+        - **Project IAM Admin** (for managing IAM roles)
+        
+        ### 💡 Benefits of Uploading Credentials
+        
+        - **Automatic deployment** without manual authentication
+        - **Consistent authentication** across sessions
+        - **Better error handling** with specific service account details
+        """)
+    
+    st.divider()
+    
     # Ensure series catalog helper is available before any popup rendering
     def gp_series_catalog() -> Dict[str, Dict[str, Dict[str, list]]]:
         return {
@@ -556,6 +813,7 @@ def project_builder():
     with col1:
         project_id = st.text_input(
             "Project ID", 
+            value=st.session_state.project_id,
             placeholder="my-awesome-project-123",
             help="Must be globally unique across all GCP projects"
         )
@@ -3044,11 +3302,30 @@ def project_builder():
                 import zipfile
                 import io
                 
+                # Option to include credentials in ZIP
+                include_credentials = st.checkbox(
+                    "🔑 Include credentials.json in ZIP (for standalone use)",
+                    help="Include your credentials file in the ZIP for easier standalone deployment",
+                    value=False
+                )
+                
                 # Create ZIP content
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                     for fname, fcontent in st.session_state.generated_tf_files.items():
                         zip_file.writestr(fname, fcontent)
+                    
+                    # Include credentials if requested
+                    if include_credentials and hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file:
+                        zip_file.writestr("credentials.json", st.session_state.credentials_file)
+                        
+                        # Update main.tf to use the included credentials file
+                        main_tf_content = st.session_state.generated_tf_files.get("main.tf", "")
+                        main_tf_content = main_tf_content.replace(
+                            "# credentials = file(\"path/to/credentials.json\")  # Alternative: specify credentials file directly",
+                            "credentials = file(\"credentials.json\")  # Using included credentials file"
+                        )
+                        zip_file.writestr("main.tf", main_tf_content)
                     readme_content = f"""# Terraform Configuration for {project_id}
 
 This ZIP contains standalone Terraform files generated from the GCP Project Creator GUI.
@@ -3059,12 +3336,16 @@ This ZIP contains standalone Terraform files generated from the GCP Project Crea
 - outputs.tf: Output definitions
 - terraform.tfvars: Variable values (HCL format)
 - terraform.tfvars.json: Variable values (JSON format)
+{f"- credentials.json: GCP service account credentials" if include_credentials and hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file else ""}
 
 ## Usage:
 1. Extract all files to a directory
 2. Run: terraform init
 3. Run: terraform plan
 4. Run: terraform apply
+
+## Authentication:
+{f"**Included credentials.json**: The main.tf file is configured to use the included credentials.json file automatically." if include_credentials and hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file else "**Environment Variable**: Set GOOGLE_APPLICATION_CREDENTIALS environment variable to point to your credentials file, or uncomment the credentials line in main.tf and specify your credentials file path."}
 
 ## Requirements:
 - Terraform >= 1.6.0
@@ -3164,6 +3445,29 @@ def config_manager():
 def deploy_monitor():
     st.header("🚀 Deploy & Monitor")
     st.markdown("Deploy your configurations and monitor the process")
+    
+    # Show credentials status
+    st.subheader("🔑 Authentication Status")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        if hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file:
+            try:
+                creds_json = json.loads(st.session_state.credentials_file)
+                service_account_email = creds_json.get('client_email', 'Unknown')
+                project_id = creds_json.get('project_id', 'Unknown')
+                st.success(f"✅ Credentials loaded - Service Account: {service_account_email}")
+                st.info(f"📋 Project ID: {project_id}")
+            except:
+                st.success("✅ Credentials loaded")
+        else:
+            st.info("ℹ️ No credentials uploaded - will use existing `gcloud` authentication if available")
+            st.info("💡 Upload credentials in Project Builder for automatic deployment, or use existing `gcloud` authentication")
+    
+    with col2:
+        if st.button("🏗️ Go to Builder", type="secondary"):
+            st.session_state.page = "🏗️ Project Builder"
+            st.rerun()
     
     # Select configuration to deploy
     configs_dir = project_root / "configs"
@@ -3288,6 +3592,18 @@ def deploy_config(config_file, plan_only=False, auto_approve=False):
     
     st.info(f"Deploying project: **{config.get('project_id', 'Unknown')}**")
     
+    # Show authentication method
+    if hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file:
+        st.info("🔑 **Authentication**: Using uploaded service account credentials")
+        try:
+            creds_json = json.loads(st.session_state.credentials_file)
+            service_account = creds_json.get('client_email', 'Unknown')
+            st.info(f"🔑 **Service Account**: {service_account}")
+        except:
+            pass
+    else:
+        st.info("🔑 **Authentication**: Using existing gcloud authentication")
+    
     # Create progress bar
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -3319,36 +3635,94 @@ def deploy_config(config_file, plan_only=False, auto_approve=False):
         # Show the command being run
         st.info(f"🔧 Running command: `{' '.join(deploy_cmd)}`")
         
-        # Only check GCP auth if we're actually deploying (not planning)
+        # Check for credentials and set up authentication
+        credentials_setup_success = False
+        
         if not plan_only:
-            # Check if gcloud is available and authenticated
-            try:
-                gcloud_check = subprocess.run(
-                    ["gcloud", "--version"],
-                    capture_output=True,
-                    text=True,
-                    timeout=10
-                )
-                if gcloud_check.returncode == 0:
-                    st.success("✅ gcloud is available")
+            # First check if we have uploaded credentials in session state
+            if hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file:
+                try:
+                    # Create a temporary credentials file
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        f.write(st.session_state.credentials_file)
+                        temp_creds_path = f.name
                     
-                    # Check authentication
-                    auth_check = subprocess.run(
-                        ["gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)"],
+                    # Set environment variable for authentication
+                    env['GOOGLE_APPLICATION_CREDENTIALS'] = temp_creds_path
+                    
+                    # Test authentication with the credentials
+                    gcloud_check = subprocess.run(
+                        ["gcloud", "--version"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        env=env
+                    )
+                    
+                    if gcloud_check.returncode == 0:
+                        st.success("✅ gcloud is available")
+                        
+                        # Activate service account
+                        auth_cmd = ['gcloud', 'auth', 'activate-service-account', '--key-file', temp_creds_path]
+                        auth_result = subprocess.run(
+                            auth_cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                            env=env
+                        )
+                        
+                        if auth_result.returncode == 0:
+                            # Get the service account email from credentials
+                            creds_json = json.loads(st.session_state.credentials_file)
+                            service_account_email = creds_json.get('client_email', 'Unknown')
+                            st.success(f"✅ Authenticated with service account: {service_account_email}")
+                            credentials_setup_success = True
+                        else:
+                            st.error(f"❌ Failed to authenticate with service account: {auth_result.stderr}")
+                    else:
+                        st.error("❌ gcloud command not found")
+                        
+                except Exception as e:
+                    st.error(f"❌ Error setting up credentials: {str(e)}")
+            else:
+                # Fallback to checking existing gcloud authentication
+                try:
+                    gcloud_check = subprocess.run(
+                        ["gcloud", "--version"],
                         capture_output=True,
                         text=True,
                         timeout=10
                     )
-                    if auth_check.returncode == 0 and auth_check.stdout.strip():
-                        st.success(f"✅ Authenticated as: {auth_check.stdout.strip()}")
+                    if gcloud_check.returncode == 0:
+                        st.success("✅ gcloud is available")
+                        
+                        # Check authentication
+                        auth_check = subprocess.run(
+                            ["gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)"],
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        if auth_check.returncode == 0 and auth_check.stdout.strip():
+                            st.success(f"✅ Authenticated as: {auth_check.stdout.strip()}")
+                            credentials_setup_success = True
+                        else:
+                            st.warning("⚠️ No active gcloud authentication found")
+                            st.info("💡 Upload credentials in Project Settings or run: `gcloud auth login`")
                     else:
-                        st.error("❌ Not authenticated with GCP. Run: `gcloud auth login`")
-                else:
-                    st.error("❌ gcloud command not found")
-            except Exception as e:
-                st.error(f"❌ Error checking gcloud: {str(e)}")
+                        st.error("❌ gcloud command not found")
+                except Exception as e:
+                    st.error(f"❌ Error checking gcloud: {str(e)}")
         else:
             st.info("ℹ️ Plan-only mode: No GCP authentication required")
+            credentials_setup_success = True
+        
+        # If we're deploying (not planning) and no credentials are set up, show warning
+        if not plan_only and not credentials_setup_success:
+            st.warning("⚠️ No GCP credentials configured. Deployment may fail.")
+            st.info("💡 Please configure credentials in the Project Settings page before deploying.")
         
         # Use real-time output to avoid hanging
         # Pass environment variables to ensure gcloud access
