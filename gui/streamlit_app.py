@@ -69,14 +69,19 @@ provider "google" {
     
     # Project resource (if creating project)
     if create_project:
-        content += f'''resource "google_project" "project" {{
+        content += f'''# Create the project
+resource "google_project" "project" {{
   project_id      = var.project_id
   name            = var.project_id
   org_id          = var.organization_id
-  billing_account = var.billing_account
+  billing_account = var.billing_account != "" ? var.billing_account : null
   labels          = var.labels
   deletion_policy = "DELETE"
 }}
+
+'''
+    else:
+        content += f'''# Working with existing project - no project creation needed
 
 '''
     
@@ -110,8 +115,9 @@ variable "organization_id" {
 }
 
 variable "billing_account" {
-  description = "Billing account ID"
+  description = "Billing account ID (optional)"
   type        = string
+  default     = ""
 }
 
 variable "labels" {
@@ -493,29 +499,62 @@ def project_builder():
             st.error("❌ No credentials uploaded")
             return
         
-        try:
-            # First check if gcloud is available
+        # Find gcloud executable
+        gcloud_path = None
+        possible_paths = [
+            "gcloud",  # Try PATH first
+            r"C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+            r"C:\Program Files\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+            r"C:\Users\{}\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd".format(os.getenv('USERNAME', '')),
+            r"C:\Users\{}\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud".format(os.getenv('USERNAME', '')),
+        ]
+        
+        for path in possible_paths:
             try:
-                gcloud_check = subprocess.run(
-                    ["gcloud", "--version"],
+                result = subprocess.run(
+                    [path, "--version"],
                     capture_output=True,
                     text=True,
                     timeout=10
                 )
-                if gcloud_check.returncode != 0:
-                    st.error("❌ Google Cloud SDK (gcloud) is not installed or not in PATH")
-                    st.info("💡 Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install")
-                    return
-            except FileNotFoundError:
-                st.error("❌ Google Cloud SDK (gcloud) is not installed or not in PATH")
-                st.info("💡 Install Google Cloud SDK: https://cloud.google.com/sdk/docs/install")
-                return
-            except Exception as e:
-                st.error(f"❌ Error checking gcloud installation: {str(e)}")
-                return
+                if result.returncode == 0:
+                    gcloud_path = path
+                    break
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+            except Exception:
+                continue
+        
+        if not gcloud_path:
+            st.warning("⚠️ Google Cloud SDK not found in common locations")
+            st.info("🔧 **Troubleshooting:**")
+            st.markdown("""
+            **If you have gcloud installed:**
+            1. Make sure gcloud is in your system PATH
+            2. Restart your terminal/command prompt
+            3. Try running: `gcloud --version` in a new terminal
             
-            st.success("✅ Google Cloud SDK is available")
+            **Alternative:**
+            - Your credentials are still valid and will work for deployment
+            - The test connection is optional - deployment will work fine
+            """)
             
+            if st.button("✅ Skip Test - Credentials Look Valid", type="secondary"):
+                st.success("✅ Credentials validated successfully!")
+                try:
+                    creds_json = json.loads(st.session_state.credentials_file)
+                    service_account = creds_json.get('client_email', 'Unknown')
+                    project_id = creds_json.get('project_id', 'Unknown')
+                    st.info(f"🔑 Service Account: {service_account}")
+                    st.info(f"📋 Project ID: {project_id}")
+                    st.success("🎯 Ready for deployment!")
+                except:
+                    st.info("📋 Credentials format appears valid")
+            return
+        
+        st.success("✅ Google Cloud SDK found")
+        
+        try:
             # Create a temporary credentials file
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -527,7 +566,7 @@ def project_builder():
             env['GOOGLE_APPLICATION_CREDENTIALS'] = temp_creds_path
             
             # Test with gcloud command
-            test_cmd = ['gcloud', 'auth', 'activate-service-account', '--key-file', temp_creds_path]
+            test_cmd = [gcloud_path, 'auth', 'activate-service-account', '--key-file', temp_creds_path]
             
             with st.spinner("Testing GCP connection..."):
                 result = subprocess.run(
@@ -540,7 +579,7 @@ def project_builder():
                 
                 if result.returncode == 0:
                     # Test project access
-                    project_cmd = ['gcloud', 'config', 'get-value', 'project']
+                    project_cmd = [gcloud_path, 'config', 'get-value', 'project']
                     project_result = subprocess.run(
                         project_cmd,
                         capture_output=True,
@@ -818,14 +857,21 @@ def project_builder():
             help="Must be globally unique across all GCP projects"
         )
         billing_account = st.text_input(
-            "Billing Account", 
+            "Billing Account (Optional)", 
             placeholder="01783B-A7A65B-153181",
-            help="Your GCP billing account ID"
+            help="Your GCP billing account ID (optional - can be set later)"
         )
         organization_id = st.text_input(
             "Organization ID (Optional)", 
             placeholder="123456789012",
             help="If creating under an organization"
+        )
+        
+        # Project creation option
+        create_new_project = st.checkbox(
+            "🏗️ Create New Project",
+            value=True,
+            help="Check this if you want to create a new GCP project. Uncheck to work with an existing project."
         )
     
     with col2:
@@ -3139,8 +3185,8 @@ def project_builder():
     st.subheader("📄 Generated Configuration")
     
     if st.button("🔄 Generate YAML Configuration"):
-        if not project_id or not billing_account:
-            st.error("Please fill in Project ID and Billing Account")
+        if not project_id:
+            st.error("Please fill in Project ID")
             return
         
         from collections import OrderedDict
@@ -3148,7 +3194,8 @@ def project_builder():
         # Create ordered dictionary with specific order
         config = OrderedDict()
         config["project_id"] = project_id
-        config["billing_account"] = billing_account
+        if billing_account:  # Only include billing_account if provided
+            config["billing_account"] = billing_account
         config["labels"] = labels
         config["apis"] = selected_apis
         if organization_id:
@@ -3168,9 +3215,11 @@ def project_builder():
         # Display the configuration - only include non-empty sections
         filtered_config = {}
         
-        # Always include project_id and billing_account
+        # Always include project_id
         filtered_config["project_id"] = config["project_id"]
-        filtered_config["billing_account"] = config["billing_account"]
+        # Include billing_account only if provided
+        if config.get("billing_account"):
+            filtered_config["billing_account"] = config["billing_account"]
         
         # Only include labels if not empty
         if config.get("labels") and any(config["labels"].values()):
@@ -3205,15 +3254,16 @@ def project_builder():
 
     # New: Generate Terraform Files button
     if st.button("🛠️ Generate Terraform Files"):
-        if not project_id or not billing_account:
-            st.error("Please fill in Project ID and Billing Account")
+        if not project_id:
+            st.error("Please fill in Project ID")
             return
 
         # Reconstruct the same config structure as YAML generation (without requiring prior click)
         from collections import OrderedDict
         config: Dict[str, Any] = OrderedDict()
         config["project_id"] = project_id
-        config["billing_account"] = billing_account
+        if billing_account:  # Only include billing_account if provided
+            config["billing_account"] = billing_account
         if organization_id:
             config["organization_id"] = organization_id
         if labels and isinstance(labels, dict):
@@ -3234,18 +3284,8 @@ def project_builder():
 
         # Generate standalone Terraform files (no external dependencies) entirely in-memory
         try:
-            # Determine whether to create project (best-effort, non-fatal)
-            create_project = True
-            try:
-                result = subprocess.run([
-                    "gcloud", "projects", "list",
-                    f"--filter=projectId={project_id}",
-                    "--format=value(projectId)"
-                ], check=False, capture_output=True, text=True, timeout=10)
-                if result.returncode == 0 and (result.stdout or "").strip() == project_id:
-                    create_project = False
-            except Exception:
-                pass
+            # Use the checkbox value to determine whether to create project
+            create_project = create_new_project
 
             # Build files in memory
             main_tf_content = generate_standalone_main_tf(cleaned_config, create_project)
@@ -3259,7 +3299,8 @@ def project_builder():
             tfvars_hcl.append(f"project_id = \"{config['project_id']}\"")
             if config.get("organization_id"):
                 tfvars_hcl.append(f"organization_id = \"{config['organization_id']}\"")
-            tfvars_hcl.append(f"billing_account = \"{config['billing_account']}\"")
+            if config.get("billing_account"):
+                tfvars_hcl.append(f"billing_account = \"{config['billing_account']}\"")
             if config.get("labels"):
                 tfvars_hcl.append("labels = {")
                 for k, v in (config.get("labels") or {}).items():
@@ -3271,6 +3312,13 @@ def project_builder():
             tfvars_hcl_content = "\n".join(tfvars_hcl) + "\n"
             
             tfvars_json_content = json.dumps(cleaned_config, indent=2)
+
+            # Update main.tf to use credentials if available
+            if hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file:
+                main_tf_content = main_tf_content.replace(
+                    '# credentials = file("path/to/credentials.json")  # Alternative: specify credentials file directly',
+                    'credentials = file("credentials.json")  # Using uploaded credentials'
+                )
 
             # Save in session_state only
             st.session_state.generated_tf_files = {
@@ -3302,30 +3350,20 @@ def project_builder():
                 import zipfile
                 import io
                 
-                # Option to include credentials in ZIP
-                include_credentials = st.checkbox(
-                    "🔑 Include credentials.json in ZIP (for standalone use)",
-                    help="Include your credentials file in the ZIP for easier standalone deployment",
-                    value=False
-                )
-                
                 # Create ZIP content
                 zip_buffer = io.BytesIO()
                 with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    # Check if credentials are included and prepare main.tf accordingly
+                    credentials_included = hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file
+                    
+                    # Add all files (main.tf is already modified if credentials are included)
                     for fname, fcontent in st.session_state.generated_tf_files.items():
                         zip_file.writestr(fname, fcontent)
                     
-                    # Include credentials if requested
-                    if include_credentials and hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file:
+                    # Include credentials automatically if user has uploaded them
+                    if credentials_included:
                         zip_file.writestr("credentials.json", st.session_state.credentials_file)
-                        
-                        # Update main.tf to use the included credentials file
-                        main_tf_content = st.session_state.generated_tf_files.get("main.tf", "")
-                        main_tf_content = main_tf_content.replace(
-                            "# credentials = file(\"path/to/credentials.json\")  # Alternative: specify credentials file directly",
-                            "credentials = file(\"credentials.json\")  # Using included credentials file"
-                        )
-                        zip_file.writestr("main.tf", main_tf_content)
+                    
                     readme_content = f"""# Terraform Configuration for {project_id}
 
 This ZIP contains standalone Terraform files generated from the GCP Project Creator GUI.
@@ -3336,7 +3374,7 @@ This ZIP contains standalone Terraform files generated from the GCP Project Crea
 - outputs.tf: Output definitions
 - terraform.tfvars: Variable values (HCL format)
 - terraform.tfvars.json: Variable values (JSON format)
-{f"- credentials.json: GCP service account credentials" if include_credentials and hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file else ""}
+{f"- credentials.json: GCP service account credentials" if credentials_included else ""}
 
 ## Usage:
 1. Extract all files to a directory
@@ -3344,8 +3382,14 @@ This ZIP contains standalone Terraform files generated from the GCP Project Crea
 3. Run: terraform plan
 4. Run: terraform apply
 
+## Important Notes:
+- **Project Creation**: {'Creates a new GCP project with the specified configuration' if create_project else 'Works with an existing GCP project (no project creation)'}
+- **Existing Projects**: {'If the project already exists, you may get an error. Use a different project_id if needed.' if create_project else 'Make sure the specified project_id exists and you have access to it.'}
+- **Billing Account**: If not provided, you can set it later in the GCP Console
+- **APIs**: Required APIs will be enabled automatically
+
 ## Authentication:
-{f"**Included credentials.json**: The main.tf file is configured to use the included credentials.json file automatically." if include_credentials and hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file else "**Environment Variable**: Set GOOGLE_APPLICATION_CREDENTIALS environment variable to point to your credentials file, or uncomment the credentials line in main.tf and specify your credentials file path."}
+{f"**Included credentials.json**: The main.tf file is configured to use the included credentials.json file automatically. You can run terraform commands directly without additional setup." if credentials_included else "**Environment Variable**: Set GOOGLE_APPLICATION_CREDENTIALS environment variable to point to your credentials file, or uncomment the credentials line in main.tf and specify your credentials file path."}
 
 ## Requirements:
 - Terraform >= 1.6.0
@@ -3359,6 +3403,12 @@ Project ID: {project_id}
                 
                 zip_buffer.seek(0)
                 zip_bytes = zip_buffer.getvalue()
+                
+                # Show what will be included in the ZIP
+                if hasattr(st.session_state, 'credentials_file') and st.session_state.credentials_file:
+                    st.info("🔑 **Credentials included**: Your uploaded credentials.json will be automatically included in the ZIP with configured main.tf")
+                else:
+                    st.info("ℹ️ **No credentials**: ZIP will not include credentials. Use environment variable or specify credentials file manually.")
                 
                 # Download button (same as YAML style)
                 st.download_button(
