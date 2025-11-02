@@ -152,42 +152,130 @@ def generate_inline_resources(resources: dict) -> str:
             vpc_items.append(resources["vpc"])
     if isinstance(resources.get("vpcs"), list):
         vpc_items.extend([v for v in resources["vpcs"] if isinstance(v, dict)])
-    
+
     for i, vpc in enumerate(vpc_items, 1):
+        name = vpc.get('name', f'vpc-{i}')
+        routing_mode = vpc.get('routing_mode', 'GLOBAL')
+        description = vpc.get('description', 'VPC created via GUI')
+        auto_create = vpc.get('auto_create_subnetworks', False)
+        mtu = vpc.get('mtu', 1460)
+
         content += f'''resource "google_compute_network" "vpc_{i}" {{
-  name                    = "{vpc.get('name', f'vpc-{i}')}"
-  auto_create_subnetworks = {str(vpc.get('auto_create_subnetworks', False)).lower()}
-  routing_mode            = "{vpc.get('routing_mode', 'GLOBAL')}"
-  description             = "{vpc.get('description', 'VPC created via GUI')}"
-  mtu                     = {vpc.get('mtu', 1460)}
-}}
+  name                    = "{name}"
+  auto_create_subnetworks = {str(auto_create).lower()}
+  routing_mode            = "{routing_mode}"
+  description             = "{description}"
+  mtu                     = {mtu}
 '''
+
+        # Advanced options
+        if vpc.get('delete_default_routes_on_create'):
+            content += f'  delete_default_routes_on_create = {str(vpc.get("delete_default_routes_on_create")).lower()}\n'
+
+        if vpc.get('enable_ula_internal_ipv6'):
+            content += f'  enable_ula_internal_ipv6 = {str(vpc.get("enable_ula_internal_ipv6")).lower()}\n'
+            if vpc.get('internal_ipv6_range'):
+                content += f'  internal_ipv6_range = "{vpc.get("internal_ipv6_range")}"\n'
+
+        if vpc.get('network_firewall_policy_enforcement_order') and vpc.get('network_firewall_policy_enforcement_order') != 'AFTER_CLASSIC_FIREWALL':
+            content += f'  network_firewall_policy_enforcement_order = "{vpc.get("network_firewall_policy_enforcement_order")}"\n'
+
+        if vpc.get('network_profile'):
+            content += f'  network_profile = "{vpc.get("network_profile")}"\n'
+
+        content += '}\n\n'
     
     # Subnets
     for i, subnet in enumerate(resources.get("subnets", []), 1):
+        name = subnet.get('name', f'subnet-{i}')
+        region = subnet.get('region', 'us-central1')
+        network = subnet.get('network', 'default')
+        ip_cidr_range = subnet.get('ip_cidr_range', f'10.0.{i}.0/24')
+
         content += f'''resource "google_compute_subnetwork" "subnet_{i}" {{
-  name          = "{subnet.get('name', f'subnet-{i}')}"
-  region        = "{subnet.get('region', 'us-central1')}"
-  network       = google_compute_network.vpc_1.name
-  ip_cidr_range = "{subnet.get('ip_cidr_range', '10.0.{i}.0/24')}"
-  private_ip_google_access = {str(subnet.get('private_ip_google_access', True)).lower()}
-}}
+  name          = "{name}"
+  region        = "{region}"
+  network       = {f'google_compute_network.vpc_1.name' if vpc_items else json.dumps(network)}
+  ip_cidr_range = "{ip_cidr_range}"
 '''
+
+        # Standard options
+        if subnet.get('private_ip_google_access') is not None:
+            content += f'  private_ip_google_access = {str(subnet.get("private_ip_google_access")).lower()}\n'
+
+        if subnet.get('description'):
+            content += f'  description = {json.dumps(subnet.get("description"))}\n'
+
+        if subnet.get('purpose') and subnet.get('purpose') != 'PRIVATE':
+            content += f'  purpose = "{subnet.get("purpose")}"\n'
+
+        if subnet.get('role'):
+            content += f'  role = "{subnet.get("role")}"\n'
+
+        # IPv6 options
+        if subnet.get('stack_type') and subnet.get('stack_type') != 'IPV4_ONLY':
+            content += f'  stack_type = "{subnet.get("stack_type")}"\n'
+
+        if subnet.get('ipv6_access_type'):
+            content += f'  ipv6_access_type = "{subnet.get("ipv6_access_type")}"\n'
+
+        if subnet.get('private_ipv6_google_access'):
+            content += f'  private_ipv6_google_access = "{subnet.get("private_ipv6_google_access")}"\n'
+
+        if subnet.get('external_ipv6_prefix'):
+            content += f'  external_ipv6_prefix = "{subnet.get("external_ipv6_prefix")}"\n'
+
+        # Advanced options
+        if subnet.get('reserved_internal_range'):
+            content += f'  reserved_internal_range = "{subnet.get("reserved_internal_range")}"\n'
+
+        if subnet.get('allow_subnet_cidr_routes_overlap'):
+            content += f'  allow_subnet_cidr_routes_overlap = {str(subnet.get("allow_subnet_cidr_routes_overlap")).lower()}\n'
+
+        # Logging configuration
+        log_config = subnet.get('log_config')
+        if log_config:
+            content += '\n  log_config {\n'
+            content += f'    aggregation_interval = "{log_config.get("aggregation_interval", "INTERVAL_5_SEC")}"\n'
+            content += f'    flow_sampling        = {log_config.get("flow_sampling", 0.5)}\n'
+            content += f'    metadata             = "{log_config.get("metadata", "INCLUDE_ALL_METADATA")}"\n'
+            content += '  }\n'
+
+        content += '}\n\n'
     
     # Storage Buckets
     for i, bucket in enumerate(resources.get("storage_buckets", []), 1):
+        name = bucket.get('name', f'bucket-{i}')
+        location = bucket.get('location', 'US')
+        force_destroy = bucket.get('force_destroy', False)
+        uniform_access = bucket.get('uniform_bucket_level_access', True)
+        versioning = bucket.get('enable_versioning', False)
+        storage_class = bucket.get('storage_class', 'STANDARD')
+        labels = bucket.get('labels', {})
+
         content += f'''resource "google_storage_bucket" "bucket_{i}" {{
-  name          = "{bucket.get('name', f'bucket-{i}')}"
-  location      = "{bucket.get('location', 'US')}"
-  force_destroy = {str(bucket.get('force_destroy', False)).lower()}
-  
-  uniform_bucket_level_access = {str(bucket.get('uniform_bucket_level_access', True)).lower()}
-  
-  versioning {{
-    enabled = {str(bucket.get('enable_versioning', False)).lower()}
+  name          = "{name}"
+  location      = "{location}"
+  force_destroy = {str(force_destroy).lower()}
+  storage_class = "{storage_class}"
+
+  uniform_bucket_level_access {{
+    enabled = {str(uniform_access).lower()}
   }}
-}}
+
+  versioning {{
+    enabled = {str(versioning).lower()}
+  }}
 '''
+
+        # Add labels if present
+        if labels:
+            content += '\n  labels = {\n'
+            for key, val in labels.items():
+                content += f'    {key} = "{val}"\n'
+            content += '  }\n'
+
+        content += '}\n\n'
     
     # Compute Instances (advanced rendering if fields provided)
     for i, vm in enumerate(resources.get("compute_instances", []), 1):
@@ -340,53 +428,150 @@ def generate_inline_resources(resources: dict) -> str:
     
     # Service Accounts
     for i, sa in enumerate(resources.get("service_accounts", []), 1):
+        account_id = sa.get('account_id', f'sa-{i}')
+        display_name = sa.get('display_name', f'Service Account {i}')
+        description = sa.get('description', 'Service account created via GUI')
+        disabled = sa.get('disabled', False)
+
         content += f'''resource "google_service_account" "sa_{i}" {{
-  account_id   = "{sa.get('account_id', f'sa-{i}')}"
-  display_name = "{sa.get('display_name', f'Service Account {i}')}"
-  description  = "{sa.get('description', 'Service account created via GUI')}"
+  account_id   = "{account_id}"
+  display_name = "{display_name}"
+'''
+        if description:
+            content += f'  description  = "{description}"\n'
+        if disabled:
+            content += f'  disabled     = {str(disabled).lower()}\n'
+        content += '}\n\n'
+
+        # Add IAM role bindings for the service account
+        roles = sa.get('roles', [])
+        if roles:
+            for role_idx, role in enumerate(roles, 1):
+                content += f'''resource "google_project_iam_member" "sa_{i}_role_{role_idx}" {{
+  project = var.project_id
+  role    = "{role}"
+  member  = "serviceAccount:${{google_service_account.sa_{i}.email}}"
 }}
+
+'''
+
+        # Add service account key if requested
+        if sa.get('create_key', False):
+            content += f'''resource "google_service_account_key" "sa_{i}_key" {{
+  service_account_id = google_service_account.sa_{i}.name
+'''
+            if sa.get('key_algorithm'):
+                content += f'  key_algorithm      = "{sa.get("key_algorithm")}"\n'
+            if sa.get('public_key_type'):
+                content += f'  public_key_type    = "{sa.get("public_key_type")}"\n'
+            if sa.get('private_key_type'):
+                content += f'  private_key_type   = "{sa.get("private_key_type")}"\n'
+            content += '}\n\n'
+
+            # Output for the private key
+            content += f'''output "sa_{i}_private_key" {{
+  value     = google_service_account_key.sa_{i}_key.private_key
+  sensitive = true
+}}
+
 '''
     
     # Firewall Rules
     for i, fw in enumerate(resources.get("firewall_rules", []), 1):
-        source_ranges = fw.get('source_ranges', ['0.0.0.0/0']) or []
-        ports = fw.get('ports', ['22']) or []
-        # Render lists as valid HCL with double-quoted strings
-        ports_hcl = f"[{', '.join([f'\"{str(p)}\"' for p in ports])}]" if ports else "[]"
-        source_ranges_hcl = f"[{', '.join([f'\"{str(r)}\"' for r in source_ranges])}]" if source_ranges else "[]"
+        name = fw.get('name', f'firewall-{i}')
+        network = fw.get('network', 'default')
+        direction = fw.get('direction', 'INGRESS')
+        priority = fw.get('priority', 1000)
+        disabled = fw.get('disabled', False)
+        description = fw.get('description', '')
+
+        source_ranges = fw.get('source_ranges', [])
+        source_tags = fw.get('source_tags', [])
+        source_service_accounts = fw.get('source_service_accounts', [])
+        target_tags = fw.get('target_tags', [])
+        target_service_accounts = fw.get('target_service_accounts', [])
+        destination_ranges = fw.get('destination_ranges', [])
+
+        # Get allows from the firewall rule
+        allows = fw.get('allows', [{"protocol": fw.get('protocol', 'tcp'), "ports": fw.get('ports', ['22'])}])
+
         content += f'''resource "google_compute_firewall" "firewall_{i}" {{
-  name    = "{fw.get('name', f'firewall-{i}')}"
-  network = google_compute_network.vpc_1.name
-  
-  allow {{
-    protocol = "{fw.get('protocol', 'tcp')}"
-    ports    = {ports_hcl}
-  }}
-  
-  source_ranges = {source_ranges_hcl}
-  direction     = "{fw.get('direction', 'INGRESS')}"
-}}
+  name     = "{name}"
+  network  = {f'google_compute_network.vpc_1.name' if vpc_items else json.dumps(network)}
+  direction = "{direction}"
+  priority = {priority}
 '''
+        if disabled:
+            content += f'  disabled = {str(disabled).lower()}\n'
+        if description:
+            content += f'  description = {json.dumps(description)}\n'
+
+        # Add allow blocks
+        for allow in allows:
+            content += '\n  allow {\n'
+            content += f'    protocol = "{allow.get("protocol", "tcp")}"\n'
+            if allow.get('ports'):
+                ports_hcl = json.dumps(allow['ports'])
+                content += f'    ports    = {ports_hcl}\n'
+            content += '  }\n'
+
+        # Add source/target configurations
+        if source_ranges:
+            content += f'\n  source_ranges = {json.dumps(source_ranges)}\n'
+        if source_tags:
+            content += f'  source_tags = {json.dumps(source_tags)}\n'
+        if source_service_accounts:
+            content += f'  source_service_accounts = {json.dumps(source_service_accounts)}\n'
+        if target_tags:
+            content += f'  target_tags = {json.dumps(target_tags)}\n'
+        if target_service_accounts:
+            content += f'  target_service_accounts = {json.dumps(target_service_accounts)}\n'
+        if destination_ranges:
+            content += f'  destination_ranges = {json.dumps(destination_ranges)}\n'
+
+        # Add logging configuration
+        if fw.get('enable_logging'):
+            content += '\n  log_config {\n'
+            content += '    metadata = "INCLUDE_ALL_METADATA"\n'
+            content += '  }\n'
+
+        content += '}\n\n'
     
     # Cloud Run Services
     for i, cr in enumerate(resources.get("cloud_run_services", []), 1):
+        name = cr.get('name', f'run-{i}')
+        location = cr.get('location', 'us-central1')
+        image = cr.get('image', 'gcr.io/cloudrun/hello')
+        allow_unauth = cr.get('allow_unauthenticated', False)
+
         content += f'''resource "google_cloud_run_service" "run_{i}" {{
-  name     = "{cr.get('name', f'run-{i}')}"
-  location = "{cr.get('location', 'us-central1')}"
-  
+  name     = "{name}"
+  location = "{location}"
+
   template {{
     spec {{
       containers {{
-        image = "{cr.get('image', 'gcr.io/cloudrun/hello')}"
+        image = "{image}"
       }}
     }}
   }}
-  
+
   traffic {{
     percent         = 100
     latest_revision = true
   }}
 }}
+
+'''
+        # Add IAM policy for unauthenticated access if requested
+        if allow_unauth:
+            content += f'''resource "google_cloud_run_service_iam_member" "run_{i}_noauth" {{
+  service  = google_cloud_run_service.run_{i}.name
+  location = google_cloud_run_service.run_{i}.location
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}}
+
 '''
     
     # Cloud SQL Instances
@@ -454,7 +639,206 @@ resource "google_secret_manager_secret_version" "secret_version_{i}" {{
   description = "{zone.get('description', 'DNS zone created via GUI')}"
 }}
 '''
-    
+
+    # Cloud Functions
+    for i, func in enumerate(resources.get("cloud_functions", []), 1):
+        name = func.get('name', f'function-{i}')
+        runtime = func.get('runtime', 'python39')
+        entry_point = func.get('entry_point', 'hello_world')
+        source_archive_bucket = func.get('source_archive_bucket', 'my-bucket')
+        source_archive_object = func.get('source_archive_object', 'function-source.zip')
+
+        content += f'''resource "google_cloudfunctions_function" "function_{i}" {{
+  name        = "{name}"
+  runtime     = "{runtime}"
+  entry_point = "{entry_point}"
+
+  source_archive_bucket = "{source_archive_bucket}"
+  source_archive_object = "{source_archive_object}"
+
+  trigger_http = true
+  available_memory_mb = {func.get('memory', 256)}
+}}
+
+'''
+
+    # Static IP Addresses
+    for i, ip in enumerate(resources.get("static_ips", []), 1):
+        name = ip.get('name', f'static-ip-{i}')
+        region = ip.get('region', 'us-central1')
+        address_type = ip.get('address_type', 'EXTERNAL')
+
+        content += f'''resource "google_compute_address" "static_ip_{i}" {{
+  name         = "{name}"
+  region       = "{region}"
+  address_type = "{address_type}"
+}}
+
+'''
+
+    # Persistent Disks
+    for i, disk in enumerate(resources.get("disks", []), 1):
+        name = disk.get('name', f'disk-{i}')
+        zone = disk.get('zone', 'us-central1-a')
+        disk_type = disk.get('type', 'pd-standard')
+        size = disk.get('size', 10)
+
+        content += f'''resource "google_compute_disk" "disk_{i}" {{
+  name = "{name}"
+  zone = "{zone}"
+  type = "{disk_type}"
+  size = {size}
+}}
+
+'''
+
+    # Redis Instances (Memorystore)
+    for i, redis in enumerate(resources.get("redis_instances", []), 1):
+        name = redis.get('name', f'redis-{i}')
+        region = redis.get('region', 'us-central1')
+        memory_size_gb = redis.get('memory_size_gb', 1)
+        tier = redis.get('tier', 'BASIC')
+
+        content += f'''resource "google_redis_instance" "redis_{i}" {{
+  name           = "{name}"
+  region         = "{region}"
+  memory_size_gb = {memory_size_gb}
+  tier           = "{tier}"
+}}
+
+'''
+
+    # Serverless VPC Connectors
+    for i, conn in enumerate(resources.get("serverless_vpc_connectors", []), 1):
+        name = conn.get('name', f'vpc-connector-{i}')
+        region = conn.get('region', 'us-central1')
+        ip_cidr_range = conn.get('ip_cidr_range', '10.8.0.0/28')
+        network = conn.get('network', 'default')
+
+        content += f'''resource "google_vpc_access_connector" "connector_{i}" {{
+  name          = "{name}"
+  region        = "{region}"
+  ip_cidr_range = "{ip_cidr_range}"
+  network       = "{network}"
+}}
+
+'''
+
+    # GKE Clusters
+    for i, gke in enumerate(resources.get("gke_clusters", []), 1):
+        name = gke.get('name', f'gke-cluster-{i}')
+        location = gke.get('location', 'us-central1')
+        node_count = gke.get('node_count', 1)
+        machine_type = gke.get('machine_type', 'e2-standard-2')
+
+        content += f'''resource "google_container_cluster" "gke_{i}" {{
+  name     = "{name}"
+  location = "{location}"
+
+  remove_default_node_pool = true
+  initial_node_count       = 1
+}}
+
+resource "google_container_node_pool" "gke_{i}_nodes" {{
+  name       = "default-pool"
+  location   = "{location}"
+  cluster    = google_container_cluster.gke_{i}.name
+  node_count = {node_count}
+
+  node_config {{
+    machine_type = "{machine_type}"
+  }}
+}}
+
+'''
+
+    # Cloud Routers
+    for i, router in enumerate(resources.get("cloud_routers", []), 1):
+        name = router.get('name', f'router-{i}')
+        region = router.get('region', 'us-central1')
+        network = router.get('network', 'default')
+
+        content += f'''resource "google_compute_router" "router_{i}" {{
+  name    = "{name}"
+  region  = "{region}"
+  network = {f'google_compute_network.vpc_1.name' if vpc_items else json.dumps(network)}
+}}
+
+'''
+
+    # Cloud NAT
+    for i, nat in enumerate(resources.get("cloud_nats", []), 1):
+        name = nat.get('name', f'nat-{i}')
+        region = nat.get('region', 'us-central1')
+        router = nat.get('router', 'my-router')
+
+        content += f'''resource "google_compute_router_nat" "nat_{i}" {{
+  name   = "{name}"
+  region = "{region}"
+  router = google_compute_router.router_1.name
+
+  nat_ip_allocate_option = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+}}
+
+'''
+
+    # IAM Policies
+    for i, iam in enumerate(resources.get("iam", []), 1):
+        iam_type = iam.get('iam_type', 'member')
+
+        if iam_type == 'member':
+            # Single member binding
+            role = iam.get('role', 'roles/viewer')
+            member = iam.get('member', 'user:example@domain.com')
+            condition = iam.get('condition')
+
+            content += f'''resource "google_project_iam_member" "iam_member_{i}" {{
+  project = var.project_id
+  role    = "{role}"
+  member  = "{member}"
+'''
+            if condition and condition.get('title'):
+                content += '\n  condition {\n'
+                content += f'    title       = {json.dumps(condition.get("title"))}\n'
+                content += f'    description = {json.dumps(condition.get("description", ""))}\n'
+                content += f'    expression  = {json.dumps(condition.get("expression"))}\n'
+                content += '  }\n'
+
+            content += '}\n\n'
+
+        elif iam_type == 'binding':
+            # Multiple members for a role
+            role = iam.get('role', 'roles/viewer')
+            members = iam.get('members', [])
+            condition = iam.get('condition')
+
+            if members:
+                content += f'''resource "google_project_iam_binding" "iam_binding_{i}" {{
+  project = var.project_id
+  role    = "{role}"
+  members = {json.dumps(members)}
+'''
+                if condition and condition.get('title'):
+                    content += '\n  condition {\n'
+                    content += f'    title       = {json.dumps(condition.get("title"))}\n'
+                    content += f'    description = {json.dumps(condition.get("description", ""))}\n'
+                    content += f'    expression  = {json.dumps(condition.get("expression"))}\n'
+                    content += '  }\n'
+
+                content += '}\n\n'
+
+        elif iam_type == 'policy':
+            # Full policy data
+            policy_data = iam.get('policy_data')
+            if policy_data:
+                content += f'''resource "google_project_iam_policy" "iam_policy_{i}" {{
+  project     = var.project_id
+  policy_data = {json.dumps(policy_data)}
+}}
+
+'''
+
     return content
 
 def main():
@@ -697,7 +1081,7 @@ def project_builder():
                 st.error(f"❌ Invalid credentials. Missing fields: {', '.join(missing_fields)}")
         
         # Show current credentials status
-        if st.session_state.credentials_file:
+        if st.session_state.get("credentials_file"):
             st.success("🔑 Credentials loaded successfully")
             
             # Action buttons
@@ -938,11 +1322,11 @@ def project_builder():
     # APIs Selection
     st.subheader("🔌 Required APIs")
     st.markdown("Select the APIs you need for your project")
-    
+
     api_categories = {
         "Core Infrastructure": [
             "compute.googleapis.com",
-            "iam.googleapis.com", 
+            "iam.googleapis.com",
             "storage.googleapis.com",
             "cloudresourcemanager.googleapis.com",
             "serviceusage.googleapis.com",
@@ -1007,20 +1391,83 @@ def project_builder():
             "storage-api.googleapis.com"
         ]
     }
-    
-    selected_apis = []
+
+    # Initialize session state for APIs
+    if 'selected_apis' not in st.session_state:
+        st.session_state.selected_apis = []
+
+    # Display currently selected APIs in a collapsible section
+    if st.session_state.get("selected_apis"):
+        with st.expander(f"📋 Currently Selected APIs ({len(st.session_state.selected_apis)})", expanded=False):
+            # Group selected APIs by category for better organization
+            selected_by_category = {}
+            for category, apis in api_categories.items():
+                selected_in_cat = [api for api in apis if api in st.session_state.selected_apis]
+                if selected_in_cat:
+                    selected_by_category[category] = selected_in_cat
+
+            for category, apis in selected_by_category.items():
+                st.markdown(f"**{category}:**")
+                for api in apis:
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        st.text(f"  • {api}")
+                    with col2:
+                        if st.button("🗑️", key=f"del_api_{api}"):
+                            st.session_state.selected_apis.remove(api)
+                            st.rerun()
+                if category != list(selected_by_category.keys())[-1]:
+                    st.markdown("")
+
+    # API Selection by Category (in collapsible expanders)
+    st.markdown("**Select APIs by Category:**")
+
+    # Track currently checked APIs
+    current_checked = []
     for category, apis in api_categories.items():
-        st.markdown(f"**{category}**")
-        for api in apis:
-            if st.checkbox(api, key=f"api_{api}"):
-                selected_apis.append(api)
-    
-    # Resources Configuration
-    st.subheader("🏗️ Resources")
-    st.markdown("Configure the infrastructure resources you want to create")
-    
+        # Count selected APIs in this category
+        selected_count = len([api for api in apis if api in st.session_state.selected_apis])
+        category_label = f"{category} ({selected_count}/{len(apis)} selected)" if selected_count > 0 else category
+
+        with st.expander(f"📦 {category_label}", expanded=False):
+            for api in apis:
+                # Check if API is already in session state
+                default_checked = api in st.session_state.selected_apis
+                if st.checkbox(api, value=default_checked, key=f"api_{api}"):
+                    current_checked.append(api)
+
+    # Update session state with currently checked APIs
+    st.session_state.selected_apis = current_checked
+
+    # Resources Configuration with Tabs
+    st.subheader("🏗️ Infrastructure Resources")
+
+    # Progress indicator
+    configured_resources = []
+    if st.session_state.get("vpcs"): configured_resources.append("VPCs")
+    if st.session_state.get("subnets"): configured_resources.append("Subnets")
+    if st.session_state.get("firewall_rules"): configured_resources.append("Firewall")
+    if st.session_state.get("compute_instances"): configured_resources.append("VMs")
+    if st.session_state.get("storage_buckets"): configured_resources.append("Storage")
+    if st.session_state.get("service_accounts"): configured_resources.append("Service Accounts")
+
+    if configured_resources:
+        st.success(f"✅ {len(configured_resources)} resource type(s) configured: {', '.join(configured_resources)}")
+    else:
+        st.info("ℹ️ No resources configured yet. Choose a category below to get started!")
+
+    # Create tabs for better organization
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🌐 Network",
+        "💻 Compute",
+        "💾 Storage & Data",
+        "🔐 Security",
+        "🚀 Services",
+        "⚙️ Other"
+    ])
+
     resources = {}
-    
+
     # Initialize session state for resources
     if 'project_resources' not in st.session_state:
         st.session_state.project_resources = {}
@@ -1029,503 +1476,392 @@ def project_builder():
         st.session_state.vpcs = []
     if 'subnets' not in st.session_state:
         st.session_state.subnets = []
-    
-    # VPC Configuration (multiple)
-    if st.checkbox("🌐 Create VPC Networks"):
-        st.markdown("**VPC Settings**")
-        if 'vpcs' not in st.session_state:
-            st.session_state.vpcs = []
-        # Number of VPC form sections like Labels UX
-        if 'vpc_form_count' not in st.session_state:
-            st.session_state.vpc_form_count = 1
 
-        # Render VPC form sections
-        for i in range(st.session_state.vpc_form_count):
-            if i > 0:
-                st.markdown("---")
+    # TAB 1: NETWORK RESOURCES
+    with tab1:
+        st.markdown("### 🌐 Network Infrastructure")
+        st.markdown("Configure VPCs, subnets, firewalls, and networking components")
+        st.markdown("---")
 
-            # Ensure there is a VPC dict for this index
-            if i >= len(st.session_state.vpcs):
-                st.session_state.vpcs.append({
-                    "name": f"my-vpc-{i+1}" if i > 0 else "my-vpc",
-                    "routing_mode": "GLOBAL",
-                    "description": "VPC created via GUI",
-                    "auto_create_subnetworks": False,
-                    "mtu": 1460,
-                    "bgp_best_path_selection_mode": "LEGACY",
-                    "bgp_always_compare_med": False,
-                    "bgp_inter_region_cost": "DEFAULT",
-                    "enable_ula_internal_ipv6": False,
-                    "delete_default_routes_on_create": False,
-                    "network_firewall_policy_enforcement_order": "AFTER_CLASSIC_FIREWALL",
-                    "network_profile": None,
-                    "resource_manager_tags": {}
-                })
 
-            vpc = st.session_state.vpcs[i]
+        # Serverless VPC Connectors
+        if st.checkbox("🔗 Create Serverless VPC Connectors"):
+            st.markdown("**Serverless VPC Connector Configuration**")
+            if 'serverless_vpc_connectors' not in st.session_state:
+                st.session_state.serverless_vpc_connectors = []
+        
+            # Display existing connectors
+            if st.session_state.get("serverless_vpc_connectors"):
+                st.markdown("**Current VPC Connectors:**")
+                for i, connector in enumerate(st.session_state.serverless_vpc_connectors):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        st.text(f"Name: {connector['name']}")
+                    with col2:
+                        st.text(f"Region: {connector['region']}")
+                    with col3:
+                        if st.button("🗑️", key=f"del_vpc_conn_{i}"):
+                            st.session_state.serverless_vpc_connectors.pop(i)
+                            st.rerun()
+        
+            # Add new connector
+            st.markdown("**Add New VPC Connector:**")
+            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+            with col1:
+                vpc_conn_name = st.text_input("Connector Name", value="my-connector", key="new_vpc_conn_name")
+            with col2:
+                vpc_conn_region = st.selectbox("Region", ["us-central1", "us-west1", "europe-west1"], key="new_vpc_conn_region")
+            with col3:
+                vpc_conn_cidr = st.text_input("CIDR Range", value="10.8.0.0/28", key="new_vpc_conn_cidr")
+            with col4:
+                if st.button("➕ Add", key="add_vpc_conn"):
+                    if vpc_conn_name and vpc_conn_cidr:
+                        new_connector = {
+                            "name": vpc_conn_name,
+                            "region": vpc_conn_region,
+                            "network": "my-vpc",
+                            "ip_cidr_range": vpc_conn_cidr
+                        }
+                        st.session_state.serverless_vpc_connectors.append(new_connector)
+                        st.rerun()
 
-            st.markdown(f"**VPC {i+1}:**")
+        # Always add Serverless VPC Connectors to resources if they exist (regardless of checkbox)
+        if st.session_state.get("serverless_vpc_connectors"):
+            resources["serverless_vpc_connectors"] = st.session_state.serverless_vpc_connectors
+
+        # Static IPs
+        if st.checkbox("🌐 Create Static IPs"):
+            st.markdown("**Static IP Configuration**")
+            if 'static_ips' not in st.session_state:
+                st.session_state.static_ips = []
+        
+            # Display existing IPs
+            if st.session_state.get("static_ips"):
+                st.markdown("**Current Static IPs:**")
+                for i, ip in enumerate(st.session_state.static_ips):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        st.text(f"Name: {ip['name']}")
+                    with col2:
+                        st.text(f"Type: {ip['address_type']}")
+                    with col3:
+                        if st.button("🗑️", key=f"del_ip_{i}"):
+                            st.session_state.static_ips.pop(i)
+                            st.rerun()
+        
+            # Add new IP
+            st.markdown("**Add New Static IP:**")
             col1, col2, col3 = st.columns([2, 2, 1])
             with col1:
-                form_name = st.text_input("VPC Name", value=vpc.get('name', ''), key=f"vpc_name_{i}")
+                ip_name = st.text_input("IP Name", value="my-ip", key="new_ip_name")
             with col2:
-                form_routing = st.selectbox(
-                    "Routing Mode", ["GLOBAL", "REGIONAL"],
-                    index=0 if vpc.get('routing_mode', 'GLOBAL') == 'GLOBAL' else 1,
-                    key=f"vpc_routing_{i}"
-                )
+                ip_type = st.selectbox("Address Type", ["EXTERNAL", "INTERNAL"], key="new_ip_type")
             with col3:
-                if st.button("🗑️", key=f"del_vpc_{i}"):
-                    st.session_state.vpcs.pop(i)
-                    st.session_state.vpc_form_count -= 1
-                    st.rerun()
+                if st.button("➕ Add", key="add_ip"):
+                    if ip_name:
+                        new_ip = {
+                            "name": ip_name,
+                            "address_type": ip_type,
+                            "description": "Static IP created via GUI"
+                        }
+                        st.session_state.static_ips.append(new_ip)
+                        st.rerun()
 
-            # If REGIONAL routing, allow selecting a region
-            form_region = vpc.get('region', 'us-central1')
-            if form_routing == 'REGIONAL':
-                region_options = [
-                    "us-central1", "us-west1", "us-east1", "us-west2",
-                    "europe-west1", "europe-west2", "asia-east1", "asia-south1"
-                ]
-                # Safe index fallback
-                try:
-                    default_region_index = region_options.index(form_region)
-                except ValueError:
-                    default_region_index = 0
-                form_region = st.selectbox(
-                    "Region", region_options,
-                    index=default_region_index,
-                    key=f"vpc_region_{i}"
-                )
+        # Always add Static IPs to resources if they exist (regardless of checkbox)
+        if st.session_state.get("static_ips"):
+            resources["static_ips"] = st.session_state.static_ips
 
-            # Advanced VPC options (collapsible)
-            with st.expander("🔧 Advanced VPC Options", expanded=False):
-                col1, col2 = st.columns(2)
-                with col1:
-                    form_auto_create_subnetworks = st.checkbox(
-                        "Auto Create Subnetworks", 
-                        value=vpc.get('auto_create_subnetworks', False),
-                        key=f"vpc_auto_create_{i}"
-                    )
-                    form_mtu = st.number_input(
-                        "MTU (1300-8896)", 
-                        value=vpc.get('mtu', 1460), 
-                        min_value=1300, 
-                        max_value=8896,
-                        key=f"vpc_mtu_{i}"
-                    )
-                    form_enable_ula_ipv6 = st.checkbox(
-                        "Enable ULA Internal IPv6", 
-                        value=vpc.get('enable_ula_internal_ipv6', False),
-                        key=f"vpc_ula_ipv6_{i}"
-                    )
-                with col2:
-                    form_delete_default_routes = st.checkbox(
-                        "Delete Default Routes on Create", 
-                        value=vpc.get('delete_default_routes_on_create', False),
-                        key=f"vpc_delete_routes_{i}"
-                    )
-                    form_firewall_order = st.selectbox(
-                        "Firewall Policy Enforcement Order",
-                        ["AFTER_CLASSIC_FIREWALL", "BEFORE_CLASSIC_FIREWALL"],
-                        index=0 if vpc.get('network_firewall_policy_enforcement_order', 'AFTER_CLASSIC_FIREWALL') == 'AFTER_CLASSIC_FIREWALL' else 1,
-                        key=f"vpc_firewall_order_{i}"
-                    )
-                    form_network_profile = st.text_input(
-                        "Network Profile URL", 
-                        value=vpc.get('network_profile', ''),
-                        placeholder="projects/PROJECT/global/networkProfiles/PROFILE",
-                        key=f"vpc_network_profile_{i}"
-                    )
+        # Cloud NAT
+        if st.checkbox("🌍 Create Cloud NAT"):
+            st.markdown("**Cloud NAT Configuration**")
+            if 'cloud_nats' not in st.session_state:
+                st.session_state.cloud_nats = []
 
-                # BGP Configuration
-                st.markdown("**BGP Configuration:**")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    form_bgp_mode = st.selectbox(
-                        "BGP Best Path Selection Mode",
-                        ["LEGACY", "STANDARD"],
-                        index=0 if vpc.get('bgp_best_path_selection_mode', 'LEGACY') == 'LEGACY' else 1,
-                        key=f"vpc_bgp_mode_{i}"
-                    )
-                with col2:
-                    form_bgp_compare_med = st.checkbox(
-                        "BGP Always Compare MED", 
-                        value=vpc.get('bgp_always_compare_med', False),
-                        key=f"vpc_bgp_med_{i}"
-                    )
-                with col3:
-                    form_bgp_inter_region = st.selectbox(
-                        "BGP Inter-Region Cost",
-                        ["DEFAULT", "ADD_COST_TO_MED"],
-                        index=0 if vpc.get('bgp_inter_region_cost', 'DEFAULT') == 'DEFAULT' else 1,
-                        key=f"vpc_bgp_inter_region_{i}"
-                    )
+            nat_name = st.text_input("NAT Name", value="my-nat", key="nat_name")
+            nat_region = st.selectbox("Region", ["us-central1", "us-west1", "europe-west1"], key="nat_region")
 
-                # IPv6 Configuration
-                if form_enable_ula_ipv6:
-                    st.markdown("**IPv6 Configuration:**")
-                    form_internal_ipv6_range = st.text_input(
-                        "Internal IPv6 Range (/48)", 
-                        value=vpc.get('internal_ipv6_range', ''),
-                        placeholder="fd20:1234:5678::/48",
-                        key=f"vpc_ipv6_range_{i}"
-                    )
+            if nat_name:
+                nat_config = {
+                    "name": nat_name,
+                    "region": nat_region,
+                    "router": "my-router"
+                }
+                # Store in session state
+                if not st.session_state.cloud_nats or st.session_state.cloud_nats[0].get('name') != nat_name:
+                    st.session_state.cloud_nats = [nat_config]
 
-                # Resource Manager Tags
-                st.markdown("**Resource Manager Tags:**")
-                form_resource_tags = st.text_input(
-                    "Resource Manager Tags (JSON format)", 
-                    value=json.dumps(vpc.get('resource_manager_tags', {}), indent=2),
-                    placeholder='{"tagKeys/123": "tagValues/456"}',
-                    key=f"vpc_resource_tags_{i}"
-                )
+        # Always add Cloud NATs to resources if they exist (regardless of checkbox)
+        if st.session_state.get("cloud_nats"):
+            resources["cloud_nats"] = st.session_state.cloud_nats
 
-            # Parse resource manager tags
-            try:
-                resource_tags = json.loads(form_resource_tags) if form_resource_tags and form_resource_tags.strip() else {}
-            except json.JSONDecodeError:
-                resource_tags = {}
+        # Cloud Router
+        if st.checkbox("🛣️ Create Cloud Router"):
+            st.markdown("**Cloud Router Configuration**")
+            if 'cloud_routers' not in st.session_state:
+                st.session_state.cloud_routers = []
 
-            # Update VPC data
-            vpc_data = {
-                "name": form_name,
-                "routing_mode": form_routing,
-                "description": vpc.get("description", "VPC created via GUI"),
-                "auto_create_subnetworks": form_auto_create_subnetworks,
-                "mtu": form_mtu,
-                "bgp_best_path_selection_mode": form_bgp_mode,
-                "bgp_always_compare_med": form_bgp_compare_med,
-                "bgp_inter_region_cost": form_bgp_inter_region,
-                "enable_ula_internal_ipv6": form_enable_ula_ipv6,
-                "delete_default_routes_on_create": form_delete_default_routes,
-                "network_firewall_policy_enforcement_order": form_firewall_order,
-                "network_profile": form_network_profile if form_network_profile and form_network_profile.strip() else None,
-                "resource_manager_tags": resource_tags
-            }
+            router_name = st.text_input("Router Name", value="my-router", key="router_name")
+            router_region = st.selectbox("Region", ["us-central1", "us-west1", "europe-west1"], key="router_region")
 
-            # Add region if REGIONAL routing
-            if form_routing == 'REGIONAL':
-                vpc_data["region"] = form_region
+            if router_name:
+                router_config = {
+                    "name": router_name,
+                    "region": router_region,
+                    "network": "my-vpc"
+                }
+                # Store in session state
+                if not st.session_state.cloud_routers or st.session_state.cloud_routers[0].get('name') != router_name:
+                    st.session_state.cloud_routers = [router_config]
 
-            # Add IPv6 range if ULA IPv6 is enabled
-            if form_enable_ula_ipv6 and form_internal_ipv6_range and form_internal_ipv6_range.strip():
-                vpc_data["internal_ipv6_range"] = form_internal_ipv6_range
+        # Always add Cloud Routers to resources if they exist (regardless of checkbox)
+        if st.session_state.get("cloud_routers"):
+            resources["cloud_routers"] = st.session_state.cloud_routers
 
-            st.session_state.vpcs[i] = vpc_data
+        # VPC Configuration (multiple)
+        if st.checkbox("🌐 Create VPC Networks", key="checkbox_vpc"):
+            if 'vpcs' not in st.session_state:
+                st.session_state.vpcs = []
+            # Number of VPC form sections like Labels UX
+            if 'vpc_form_count' not in st.session_state:
+                st.session_state.vpc_form_count = 1
 
-        # Add button to create another VPC section
-        if st.button("➕ Add Another VPC", key="add_vpc_section"):
-            st.session_state.vpc_form_count += 1
-            st.rerun()
+            # Display existing VPCs in a collapsible section
+            if st.session_state.get("vpcs"):
+                with st.expander(f"📋 Current VPC Networks ({len(st.session_state.vpcs)})", expanded=False):
+                    for idx, vpc in enumerate(st.session_state.vpcs):
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                        with col1:
+                            st.text(f"**{vpc.get('name', 'unnamed')}**")
+                        with col2:
+                            st.text(f"Routing: {vpc.get('routing_mode', 'GLOBAL')}")
+                        with col3:
+                            st.text(f"MTU: {vpc.get('mtu', 1460)}")
+                        with col4:
+                            if st.button("🗑️", key=f"del_vpc_list_{idx}"):
+                                st.session_state.vpcs.pop(idx)
+                                if st.session_state.vpc_form_count > 1:
+                                    st.session_state.vpc_form_count -= 1
+                                st.rerun()
+                        if idx < len(st.session_state.vpcs) - 1:
+                            st.markdown("---")
 
-        if st.session_state.vpcs:
-            resources["vpcs"] = st.session_state.vpcs
-    
-    # Subnets
-    if st.checkbox("📡 Create Subnets"):
-        st.markdown("**Subnet Configuration**")
-        if 'subnets' not in st.session_state:
-            st.session_state.subnets = []
-        if 'subnet_form_count' not in st.session_state:
-            st.session_state.subnet_form_count = 1
+            st.markdown("**Configure VPC:**")
+            # Render VPC form sections
+            for i in range(st.session_state.vpc_form_count):
+                    if i > 0:
+                        st.markdown("---")
 
-        for i in range(st.session_state.subnet_form_count):
-            if i > 0:
-                st.markdown("---")
+                    # Ensure there is a VPC dict for this index
+                    if i >= len(st.session_state.vpcs):
+                        st.session_state.vpcs.append({
+                            "name": f"my-vpc-{i+1}" if i > 0 else "my-vpc",
+                            "routing_mode": "GLOBAL",
+                            "description": "VPC created via GUI",
+                            "auto_create_subnetworks": False,
+                            "mtu": 1460,
+                            "bgp_best_path_selection_mode": "LEGACY",
+                            "bgp_always_compare_med": False,
+                            "bgp_inter_region_cost": "DEFAULT",
+                            "enable_ula_internal_ipv6": False,
+                            "delete_default_routes_on_create": False,
+                            "network_firewall_policy_enforcement_order": "AFTER_CLASSIC_FIREWALL",
+                            "network_profile": None,
+                            "resource_manager_tags": {}
+                        })
 
-            # Determine available VPC names (only from currently enabled VPC section)
-            vpc_options = []
-            if resources.get("vpc") and resources["vpc"].get("name"):
-                vpc_options.append(resources["vpc"]["name"])
-            if isinstance(resources.get("vpcs"), list):
-                for v in resources["vpcs"]:
-                    if isinstance(v, dict) and v.get("name"):
-                        vpc_options.append(v["name"])
-            # Removed fallback to session_state.vpcs - only show VPCs when VPC section is enabled
+                    vpc = st.session_state.vpcs[i]
 
-            # Ensure data object exists
-            if i >= len(st.session_state.subnets):
-                st.session_state.subnets.append({
-                    "name": f"subnet-{i+1}",
-                    "region": "us-central1",
-                    "ip_cidr_range": "10.0.%d.0/24" % (i),
-                    "network": (vpc_options[0] if vpc_options else ""),
-                    "private_ip_google_access": True,
-                    "purpose": "PRIVATE",
-                    "description": None,
-                    "reserved_internal_range": None,
-                    "role": None,
-                    "private_ipv6_google_access": None,
-                    "stack_type": "IPV4_ONLY",
-                    "ipv6_access_type": None,
-                    "external_ipv6_prefix": None,
-                    "ip_collection": None,
-                    "allow_subnet_cidr_routes_overlap": False,
-                    "send_secondary_ip_range_if_empty": False,
-                    "resource_manager_tags": {},
-                    "log_config": None
-                })
-
-            subnet = st.session_state.subnets[i]
-
-            st.markdown(f"**Subnet {i+1}:**")
-            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-            with col1:
-                form_name = st.text_input("Subnet Name", value=subnet.get('name', ''), key=f"subnet_name_{i}")
-            with col2:
-                form_region = st.selectbox(
-                    "Region", ["us-central1", "us-west1", "europe-west1"],
-                    index=["us-central1", "us-west1", "europe-west1"].index(subnet.get('region', 'us-central1')),
-                    key=f"subnet_region_{i}"
-                )
-            with col3:
-                form_cidr = st.text_input("CIDR Range", value=subnet.get('ip_cidr_range', ''), key=f"subnet_cidr_{i}")
-            with col4:
-                if st.button("🗑️", key=f"del_subnet_{i}"):
-                    st.session_state.subnets.pop(i)
-                    st.session_state.subnet_form_count -= 1
-                    st.rerun()
-
-            st.markdown("**Attach to VPC**")
-            if vpc_options:
-                try:
-                    default_vpc_idx = vpc_options.index(subnet.get('network', vpc_options[0]))
-                except ValueError:
-                    default_vpc_idx = 0
-                form_network = st.selectbox("VPC Network", vpc_options, index=default_vpc_idx, key=f"subnet_network_{i}")
-            else:
-                form_network = st.text_input("VPC Network Name", value=subnet.get('network', ''), placeholder="enter existing VPC name", key=f"subnet_network_text_{i}")
-
-            # Basic subnet options
-            col1, col2 = st.columns(2)
-            with col1:
-                form_private_ip_google_access = st.checkbox("Private Google Access", value=subnet.get('private_ip_google_access', True), key=f"subnet_private_ip_{i}")
-            with col2:
-                form_purpose = st.selectbox("Purpose", ["PRIVATE", "REGIONAL_MANAGED_PROXY", "GLOBAL_MANAGED_PROXY", "PRIVATE_SERVICE_CONNECT", "PEER_MIGRATION", "PRIVATE_NAT"], index=0, key=f"subnet_purpose_{i}")
-
-            # Advanced subnet options (collapsible)
-            with st.expander("🔧 Advanced Subnet Options", expanded=False):
-                col1, col2 = st.columns(2)
-                with col1:
-                    form_description = st.text_input(
-                        "Description", 
-                        value=subnet.get('description', ''),
-                        key=f"subnet_description_{i}"
-                    )
-                    form_reserved_internal_range = st.text_input(
-                        "Reserved Internal Range", 
-                        value=subnet.get('reserved_internal_range', ''),
-                        placeholder="networkconnectivity.googleapis.com/projects/PROJECT/locations/global/internalRanges/RANGE",
-                        key=f"subnet_reserved_range_{i}"
-                    )
-                    form_role = st.selectbox(
-                        "Role (for REGIONAL_MANAGED_PROXY)",
-                        ["ACTIVE", "BACKUP"],
-                        index=0 if subnet.get('role', 'ACTIVE') == 'ACTIVE' else 1,
-                        key=f"subnet_role_{i}"
-                    )
-                with col2:
-                    form_private_ipv6_google_access = st.text_input(
-                        "Private IPv6 Google Access", 
-                        value=subnet.get('private_ipv6_google_access', ''),
-                        key=f"subnet_private_ipv6_{i}"
-                    )
-                    form_external_ipv6_prefix = st.text_input(
-                        "External IPv6 Prefix", 
-                        value=subnet.get('external_ipv6_prefix', ''),
-                        key=f"subnet_external_ipv6_{i}"
-                    )
-                    form_ip_collection = st.text_input(
-                        "IP Collection (PublicDelegatedPrefix)", 
-                        value=subnet.get('ip_collection', ''),
-                        placeholder="projects/PROJECT/regions/REGION/publicDelegatedPrefixes/PREFIX",
-                        key=f"subnet_ip_collection_{i}"
-                    )
-
-                # IPv6 Configuration
-                st.markdown("**IPv6 Configuration:**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    form_stack_type = st.selectbox(
-                        "Stack Type",
-                        ["IPV4_ONLY", "IPV4_IPV6", "IPV6_ONLY"],
-                        index=0 if subnet.get('stack_type', 'IPV4_ONLY') == 'IPV4_ONLY' else (1 if subnet.get('stack_type') == 'IPV4_IPV6' else 2),
-                        key=f"subnet_stack_type_{i}"
-                    )
-                with col2:
-                    form_ipv6_access_type = st.selectbox(
-                        "IPv6 Access Type",
-                        ["EXTERNAL", "INTERNAL"],
-                        index=0 if subnet.get('ipv6_access_type', 'EXTERNAL') == 'EXTERNAL' else 1,
-                        key=f"subnet_ipv6_access_{i}"
-                    )
-
-                # Advanced Configuration
-                st.markdown("**Advanced Configuration:**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    form_allow_cidr_overlap = st.checkbox(
-                        "Allow Subnet CIDR Routes Overlap", 
-                        value=subnet.get('allow_subnet_cidr_routes_overlap', False),
-                        key=f"subnet_allow_overlap_{i}"
-                    )
-                with col2:
-                    form_send_secondary_empty = st.checkbox(
-                        "Send Secondary IP Range If Empty", 
-                        value=subnet.get('send_secondary_ip_range_if_empty', False),
-                        key=f"subnet_send_secondary_{i}"
-                    )
-
-                # Logging Configuration
-                st.markdown("**Logging Configuration:**")
-                form_enable_logging = st.checkbox(
-                    "Enable VPC Flow Logging", 
-                    value=subnet.get('log_config') is not None,
-                    key=f"subnet_enable_logging_{i}"
-                )
-                
-                if form_enable_logging:
-                    col1, col2, col3 = st.columns(3)
+                    st.markdown(f"**VPC {i+1}:**")
+                    col1, col2, col3 = st.columns([2, 2, 1])
                     with col1:
-                        form_log_aggregation = st.selectbox(
-                            "Aggregation Interval",
-                            ["INTERVAL_5_SEC", "INTERVAL_30_SEC", "INTERVAL_1_MIN", "INTERVAL_5_MIN", "INTERVAL_10_MIN", "INTERVAL_15_MIN"],
-                            index=0,
-                            key=f"subnet_log_aggregation_{i}"
-                        )
+                        form_name = st.text_input("VPC Name", value=vpc.get('name', ''), key=f"vpc_name_{i}")
                     with col2:
-                        form_log_sampling = st.number_input(
-                            "Flow Sampling (0.0-1.0)", 
-                            value=0.5, 
-                            min_value=0.0, 
-                            max_value=1.0, 
-                            step=0.1,
-                            key=f"subnet_log_sampling_{i}"
+                        form_routing = st.selectbox(
+                            "Routing Mode", ["GLOBAL", "REGIONAL"],
+                            index=0 if vpc.get('routing_mode', 'GLOBAL') == 'GLOBAL' else 1,
+                            key=f"vpc_routing_{i}"
                         )
                     with col3:
-                        form_log_metadata = st.selectbox(
-                            "Log Metadata",
-                            ["INCLUDE_ALL_METADATA", "EXCLUDE_ALL_METADATA", "CUSTOM_METADATA"],
-                            index=0,
-                            key=f"subnet_log_metadata_{i}"
+                        if st.button("🗑️", key=f"del_vpc_{i}"):
+                            st.session_state.vpcs.pop(i)
+                            st.session_state.vpc_form_count -= 1
+                            st.rerun()
+
+                    # If REGIONAL routing, allow selecting a region
+                    form_region = vpc.get('region', 'us-central1')
+                    if form_routing == 'REGIONAL':
+                        region_options = [
+                            "us-central1", "us-west1", "us-east1", "us-west2",
+                            "europe-west1", "europe-west2", "asia-east1", "asia-south1"
+                        ]
+                        # Safe index fallback
+                        try:
+                            default_region_index = region_options.index(form_region)
+                        except ValueError:
+                            default_region_index = 0
+                        form_region = st.selectbox(
+                            "Region", region_options,
+                            index=default_region_index,
+                            key=f"vpc_region_{i}"
                         )
 
-                # Resource Manager Tags
-                st.markdown("**Resource Manager Tags:**")
-                form_resource_tags = st.text_input(
-                    "Resource Manager Tags (JSON format)", 
-                    value=json.dumps(subnet.get('resource_manager_tags', {}), indent=2),
-                    placeholder='{"tagKeys/123": "tagValues/456"}',
-                    key=f"subnet_resource_tags_{i}"
-                )
+                    # Advanced VPC options (collapsible)
+                    with st.expander("🔧 Advanced VPC Options", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            form_auto_create_subnetworks = st.checkbox(
+                                "Auto Create Subnetworks", 
+                                value=vpc.get('auto_create_subnetworks', False),
+                                key=f"vpc_auto_create_{i}"
+                            )
+                            form_mtu = st.number_input(
+                                "MTU (1300-8896)", 
+                                value=vpc.get('mtu', 1460), 
+                                min_value=1300, 
+                                max_value=8896,
+                                key=f"vpc_mtu_{i}"
+                            )
+                            form_enable_ula_ipv6 = st.checkbox(
+                                "Enable ULA Internal IPv6", 
+                                value=vpc.get('enable_ula_internal_ipv6', False),
+                                key=f"vpc_ula_ipv6_{i}"
+                            )
+                        with col2:
+                            form_delete_default_routes = st.checkbox(
+                                "Delete Default Routes on Create", 
+                                value=vpc.get('delete_default_routes_on_create', False),
+                                key=f"vpc_delete_routes_{i}"
+                            )
+                            form_firewall_order = st.selectbox(
+                                "Firewall Policy Enforcement Order",
+                                ["AFTER_CLASSIC_FIREWALL", "BEFORE_CLASSIC_FIREWALL"],
+                                index=0 if vpc.get('network_firewall_policy_enforcement_order', 'AFTER_CLASSIC_FIREWALL') == 'AFTER_CLASSIC_FIREWALL' else 1,
+                                key=f"vpc_firewall_order_{i}"
+                            )
+                            form_network_profile = st.text_input(
+                                "Network Profile URL", 
+                                value=vpc.get('network_profile', ''),
+                                placeholder="projects/PROJECT/global/networkProfiles/PROFILE",
+                                key=f"vpc_network_profile_{i}"
+                            )
 
-            # Parse resource manager tags
-            try:
-                resource_tags = json.loads(form_resource_tags) if form_resource_tags and form_resource_tags.strip() else {}
-            except json.JSONDecodeError:
-                resource_tags = {}
+                        # BGP Configuration
+                        st.markdown("**BGP Configuration:**")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            form_bgp_mode = st.selectbox(
+                                "BGP Best Path Selection Mode",
+                                ["LEGACY", "STANDARD"],
+                                index=0 if vpc.get('bgp_best_path_selection_mode', 'LEGACY') == 'LEGACY' else 1,
+                                key=f"vpc_bgp_mode_{i}"
+                            )
+                        with col2:
+                            form_bgp_compare_med = st.checkbox(
+                                "BGP Always Compare MED", 
+                                value=vpc.get('bgp_always_compare_med', False),
+                                key=f"vpc_bgp_med_{i}"
+                            )
+                        with col3:
+                            form_bgp_inter_region = st.selectbox(
+                                "BGP Inter-Region Cost",
+                                ["DEFAULT", "ADD_COST_TO_MED"],
+                                index=0 if vpc.get('bgp_inter_region_cost', 'DEFAULT') == 'DEFAULT' else 1,
+                                key=f"vpc_bgp_inter_region_{i}"
+                            )
 
-            # Build log config if logging is enabled
-            log_config = None
-            if form_enable_logging:
-                log_config = {
-                    "aggregation_interval": form_log_aggregation,
-                    "flow_sampling": form_log_sampling,
-                    "metadata": form_log_metadata
-                }
+                        # IPv6 Configuration
+                        if form_enable_ula_ipv6:
+                            st.markdown("**IPv6 Configuration:**")
+                            form_internal_ipv6_range = st.text_input(
+                                "Internal IPv6 Range (/48)", 
+                                value=vpc.get('internal_ipv6_range', ''),
+                                placeholder="fd20:1234:5678::/48",
+                                key=f"vpc_ipv6_range_{i}"
+                            )
 
-            # Update subnet data
-            subnet_data = {
-                "name": form_name,
-                "region": form_region,
-                "ip_cidr_range": form_cidr,
-                "network": form_network,
-                "private_ip_google_access": form_private_ip_google_access,
-                "purpose": form_purpose,
-                "description": form_description if form_description and form_description.strip() else None,
-                "reserved_internal_range": form_reserved_internal_range if form_reserved_internal_range and form_reserved_internal_range.strip() else None,
-                "role": form_role if form_purpose == "REGIONAL_MANAGED_PROXY" else None,
-                "private_ipv6_google_access": form_private_ipv6_google_access if form_private_ipv6_google_access and form_private_ipv6_google_access.strip() else None,
-                "stack_type": form_stack_type,
-                "ipv6_access_type": form_ipv6_access_type if form_stack_type != "IPV4_ONLY" else None,
-                "external_ipv6_prefix": form_external_ipv6_prefix if form_external_ipv6_prefix and form_external_ipv6_prefix.strip() else None,
-                "ip_collection": form_ip_collection if form_ip_collection and form_ip_collection.strip() else None,
-                "allow_subnet_cidr_routes_overlap": form_allow_cidr_overlap,
-                "send_secondary_ip_range_if_empty": form_send_secondary_empty,
-                "resource_manager_tags": resource_tags,
-                "log_config": log_config
-            }
+                        # Resource Manager Tags
+                        st.markdown("**Resource Manager Tags:**")
+                        form_resource_tags = st.text_input(
+                            "Resource Manager Tags (JSON format)", 
+                            value=json.dumps(vpc.get('resource_manager_tags', {}), indent=2),
+                            placeholder='{"tagKeys/123": "tagValues/456"}',
+                            key=f"vpc_resource_tags_{i}"
+                        )
 
-            st.session_state.subnets[i] = subnet_data
+                    # Parse resource manager tags
+                    try:
+                        resource_tags = json.loads(form_resource_tags) if form_resource_tags and form_resource_tags.strip() else {}
+                    except json.JSONDecodeError:
+                        resource_tags = {}
 
-        if st.button("➕ Add Another Subnet", key="add_subnet_section"):
-            st.session_state.subnet_form_count += 1
-            st.rerun()
+                    # Update VPC data
+                    vpc_data = {
+                        "name": form_name,
+                        "routing_mode": form_routing,
+                        "description": vpc.get("description", "VPC created via GUI"),
+                        "auto_create_subnetworks": form_auto_create_subnetworks,
+                        "mtu": form_mtu,
+                        "bgp_best_path_selection_mode": form_bgp_mode,
+                        "bgp_always_compare_med": form_bgp_compare_med,
+                        "bgp_inter_region_cost": form_bgp_inter_region,
+                        "enable_ula_internal_ipv6": form_enable_ula_ipv6,
+                        "delete_default_routes_on_create": form_delete_default_routes,
+                        "network_firewall_policy_enforcement_order": form_firewall_order,
+                        "network_profile": form_network_profile if form_network_profile and form_network_profile.strip() else None,
+                        "resource_manager_tags": resource_tags
+                    }
 
-        if st.session_state.subnets:
-            resources["subnets"] = st.session_state.subnets
-    
-    # Firewall Rules
-    if st.checkbox("🔥 Create Firewall Rules"):
-        st.markdown("**Firewall Configuration**")
-        if 'firewall_rules' not in st.session_state:
-            st.session_state.firewall_rules = []
-        if 'firewall_form_count' not in st.session_state:
-            st.session_state.firewall_form_count = 1
+                    # Add region if REGIONAL routing
+                    if form_routing == 'REGIONAL':
+                        vpc_data["region"] = form_region
 
-        for i in range(st.session_state.firewall_form_count):
-            if i > 0:
-                st.markdown("---")
+                    # Add IPv6 range if ULA IPv6 is enabled
+                    if form_enable_ula_ipv6 and form_internal_ipv6_range and form_internal_ipv6_range.strip():
+                        vpc_data["internal_ipv6_range"] = form_internal_ipv6_range
 
-            # Ensure data object exists
-            if i >= len(st.session_state.firewall_rules):
-                st.session_state.firewall_rules.append({
-                    "name": f"firewall-rule-{i+1}",
-                    "network": "my-vpc",
-                    "direction": "INGRESS",
-                    "protocol": "tcp",
-                    "source_ranges": ["0.0.0.0/0"],
-                    "source_tags": [],
-                    "source_service_accounts": [],
-                    "target_tags": [],
-                    "target_service_accounts": [],
-                    "destination_ranges": [],
-                    "allows": [{"protocol": "tcp", "ports": ["22"]}],
-                    "priority": 1000,
-                    "disabled": False,
-                    "description": "",
-                    "enable_logging": False,
-                    "log_config": None
-                })
+                    st.session_state.vpcs[i] = vpc_data
 
-            rule = st.session_state.firewall_rules[i]
+            # Add button to create another VPC section
+            if st.button("➕ Add Another VPC", key="add_vpc_section"):
+                st.session_state.vpc_form_count += 1
+                st.rerun()
 
-            st.markdown(f"**Firewall Rule {i+1}:**")
-            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-            with col1:
-                form_name = st.text_input("Rule Name", value=rule.get('name', ''), key=f"fw_name_{i}")
-            with col2:
-                form_direction = st.selectbox(
-                    "Direction", ["INGRESS", "EGRESS"],
-                    index=0 if rule.get('direction', 'INGRESS') == 'INGRESS' else 1,
-                    key=f"fw_direction_{i}"
-                )
-            with col3:
-                form_protocol = st.selectbox(
-                    "Protocol", ["tcp", "udp", "icmp", "all"],
-                    index=["tcp", "udp", "icmp", "all"].index(rule.get('protocol', 'tcp')),
-                    key=f"fw_protocol_{i}"
-                )
-            with col4:
-                if st.button("🗑️", key=f"del_firewall_{i}"):
-                    st.session_state.firewall_rules.pop(i)
-                    st.session_state.firewall_form_count -= 1
-                    st.rerun()
+        # Always add VPCs to resources if they exist (regardless of checkbox)
+        if st.session_state.get("vpcs"):
+            resources["vpcs"] = st.session_state.vpcs
 
-            # Additional fields
-            col1, col2 = st.columns(2)
-            with col1:
+        # Subnets
+        if st.checkbox("📡 Create Subnets"):
+            if 'subnets' not in st.session_state:
+                st.session_state.subnets = []
+            if 'subnet_form_count' not in st.session_state:
+                st.session_state.subnet_form_count = 1
+
+            # Display existing Subnets in a collapsible section
+            if st.session_state.get("subnets"):
+                with st.expander(f"📋 Current Subnets ({len(st.session_state.subnets)})", expanded=False):
+                    for idx, subnet in enumerate(st.session_state.subnets):
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                        with col1:
+                            st.text(f"**{subnet.get('name', 'unnamed')}**")
+                        with col2:
+                            st.text(f"Region: {subnet.get('region', 'N/A')}")
+                        with col3:
+                            st.text(f"CIDR: {subnet.get('ip_cidr_range', 'N/A')}")
+                        with col4:
+                            if st.button("🗑️", key=f"del_subnet_list_{idx}"):
+                                st.session_state.subnets.pop(idx)
+                                if st.session_state.subnet_form_count > 1:
+                                    st.session_state.subnet_form_count -= 1
+                                st.rerun()
+                        if idx < len(st.session_state.subnets) - 1:
+                            st.markdown("---")
+
+            st.markdown("**Configure Subnet:**")
+            for i in range(st.session_state.subnet_form_count):
+                if i > 0:
+                    st.markdown("---")
+
                 # Determine available VPC names (only from currently enabled VPC section)
                 vpc_options = []
                 if resources.get("vpc") and resources["vpc"].get("name"):
@@ -1536,1383 +1872,1652 @@ def project_builder():
                             vpc_options.append(v["name"])
                 # Removed fallback to session_state.vpcs - only show VPCs when VPC section is enabled
 
-                if vpc_options:
-                    try:
-                        default_vpc_idx = vpc_options.index(rule.get('network', vpc_options[0]))
-                    except ValueError:
-                        default_vpc_idx = 0
-                    form_network = st.selectbox("Network", vpc_options, index=default_vpc_idx, key=f"fw_network_{i}")
-                else:
-                    form_network = st.text_input("Network", value=rule.get('network', 'my-vpc'), key=f"fw_network_text_{i}")
-            with col2:
-                form_source_ranges = st.text_input("Source Ranges (comma-separated)", 
-                                                 value=", ".join(rule.get('source_ranges', ['0.0.0.0/0'])), 
-                                                 key=f"fw_source_ranges_{i}")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                form_ports = st.text_input("Ports (comma-separated)", value="22", key=f"fw_ports_{i}")
-            with col2:
-                form_priority = st.number_input("Priority", value=rule.get('priority', 1000), min_value=0, max_value=65535, key=f"fw_priority_{i}")
+                # Ensure data object exists
+                if i >= len(st.session_state.subnets):
+                    st.session_state.subnets.append({
+                        "name": f"subnet-{i+1}",
+                        "region": "us-central1",
+                        "ip_cidr_range": "10.0.%d.0/24" % (i),
+                        "network": (vpc_options[0] if vpc_options else ""),
+                        "private_ip_google_access": True,
+                        "purpose": "PRIVATE",
+                        "description": None,
+                        "reserved_internal_range": None,
+                        "role": None,
+                        "private_ipv6_google_access": None,
+                        "stack_type": "IPV4_ONLY",
+                        "ipv6_access_type": None,
+                        "external_ipv6_prefix": None,
+                        "ip_collection": None,
+                        "allow_subnet_cidr_routes_overlap": False,
+                        "send_secondary_ip_range_if_empty": False,
+                        "resource_manager_tags": {},
+                        "log_config": None
+                    })
 
-            # Advanced fields (collapsible)
-            with st.expander("🔧 Advanced Options", expanded=False):
-                col1, col2 = st.columns(2)
+                subnet = st.session_state.subnets[i]
+
+                st.markdown(f"**Subnet {i+1}:**")
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
                 with col1:
-                    form_source_tags = st.text_input("Source Tags (comma-separated)", 
-                                                   value=", ".join(rule.get('source_tags', [])), 
-                                                   key=f"fw_source_tags_{i}")
-                    form_source_service_accounts = st.text_input("Source Service Accounts (comma-separated)", 
-                                                               value=", ".join(rule.get('source_service_accounts', [])), 
-                                                               key=f"fw_source_service_accounts_{i}")
+                    form_name = st.text_input("Subnet Name", value=subnet.get('name', ''), key=f"subnet_name_{i}")
                 with col2:
-                    form_target_tags = st.text_input("Target Tags (comma-separated)", 
-                                                   value=", ".join(rule.get('target_tags', [])), 
-                                                   key=f"fw_target_tags_{i}")
-                    form_target_service_accounts = st.text_input("Target Service Accounts (comma-separated)", 
-                                                               value=", ".join(rule.get('target_service_accounts', [])), 
-                                                               key=f"fw_target_service_accounts_{i}")
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    form_destination_ranges = st.text_input("Destination Ranges (comma-separated)", 
-                                                          value=", ".join(rule.get('destination_ranges', [])), 
-                                                          key=f"fw_destination_ranges_{i}")
-                with col2:
-                    form_disabled = st.checkbox("Disabled", value=rule.get('disabled', False), key=f"fw_disabled_{i}")
-
-                # Description
-                form_description = st.text_input("Description", value=rule.get('description', ''), key=f"fw_description_{i}")
-
-                # Logging configuration
-                st.markdown("**Logging:**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    form_enable_logging = st.checkbox("Enable Logging", value=rule.get('enable_logging', False), key=f"fw_enable_logging_{i}")
-                with col2:
-                    if form_enable_logging:
-                        form_log_metadata = st.selectbox("Log Metadata", 
-                                                       ["EXCLUDE_ALL_METADATA", "INCLUDE_ALL_METADATA"],
-                                                       index=0 if rule.get('log_metadata', 'EXCLUDE_ALL_METADATA') == 'EXCLUDE_ALL_METADATA' else 1,
-                                                       key=f"fw_log_metadata_{i}")
-                    else:
-                        form_log_metadata = "EXCLUDE_ALL_METADATA"
-
-            # Parse comma-separated values
-            source_ranges = [s.strip() for s in form_source_ranges.split(',') if s.strip()]
-            ports = [p.strip() for p in form_ports.split(',') if p.strip()]
-            source_tags = [s.strip() for s in form_source_tags.split(',') if s.strip()]
-            source_service_accounts = [s.strip() for s in form_source_service_accounts.split(',') if s.strip()]
-            target_tags = [s.strip() for s in form_target_tags.split(',') if s.strip()]
-            target_service_accounts = [s.strip() for s in form_target_service_accounts.split(',') if s.strip()]
-            destination_ranges = [s.strip() for s in form_destination_ranges.split(',') if s.strip()]
-            
-            # Build allows array
-            allows = [{"protocol": form_protocol, "ports": ports}] if ports else [{"protocol": form_protocol}]
-            
-            # Build log_config if logging is enabled
-            log_config = None
-            if form_enable_logging:
-                log_config = {"metadata": form_log_metadata}
-            
-            # Update rule
-            st.session_state.firewall_rules[i] = {
-                "name": form_name,
-                "network": form_network,
-                "direction": form_direction,
-                "protocol": form_protocol,
-                "source_ranges": source_ranges,
-                "source_tags": source_tags,
-                "source_service_accounts": source_service_accounts,
-                "target_tags": target_tags,
-                "target_service_accounts": target_service_accounts,
-                "destination_ranges": destination_ranges,
-                "allows": allows,
-                "priority": form_priority,
-                "disabled": form_disabled,
-                "description": form_description,
-                "enable_logging": form_enable_logging,
-                "log_config": log_config
-            }
-
-        if st.button("➕ Add Another Firewall Rule", key="add_firewall_section"):
-            st.session_state.firewall_form_count += 1
-            st.rerun()
-
-        if st.session_state.firewall_rules:
-            resources["firewall_rules"] = st.session_state.firewall_rules
-            # Debug: show what's being added
-            st.info(f"Debug: Added {len(st.session_state.firewall_rules)} firewall rules to resources")
-    
-    # Service Accounts
-    if st.checkbox("👤 Create Service Accounts"):
-        st.markdown("**Service Account Configuration**")
-        if 'service_accounts' not in st.session_state:
-            st.session_state.service_accounts = []
-        if 'service_account_form_count' not in st.session_state:
-            st.session_state.service_account_form_count = 1
-
-        for i in range(st.session_state.service_account_form_count):
-            if i > 0:
-                st.markdown("---")
-
-            # Ensure data object exists
-            if i >= len(st.session_state.service_accounts):
-                st.session_state.service_accounts.append({
-                    "account_id": f"service-account-{i+1}",
-                    "display_name": f"Service Account {i+1}",
-                    "description": "Service account created via GUI",
-                    "disabled": False,
-                    "create_ignore_already_exists": False,
-                    "roles": [],
-                    "create_key": False,
-                    "key_algorithm": "KEY_ALG_RSA_2048",
-                    "public_key_type": "TYPE_X509_PEM_FILE",
-                    "private_key_type": "TYPE_GOOGLE_CREDENTIALS_FILE",
-                    "key_file_path": None
-                })
-
-            sa = st.session_state.service_accounts[i]
-
-            st.markdown(f"**Service Account {i+1}:**")
-            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-            with col1:
-                form_account_id = st.text_input("Account ID", value=sa.get('account_id', ''), key=f"sa_account_id_{i}")
-            with col2:
-                form_display_name = st.text_input("Display Name", value=sa.get('display_name', ''), key=f"sa_display_name_{i}")
-            with col3:
-                form_description = st.text_input("Description", value=sa.get('description', ''), key=f"sa_description_{i}")
-            with col4:
-                if st.button("🗑️", key=f"del_sa_{i}"):
-                    st.session_state.service_accounts.pop(i)
-                    st.session_state.service_account_form_count -= 1
-                    st.rerun()
-
-            # Permissions/Roles selection
-            st.markdown("**Permissions:**")
-            common_roles = [
-                # Basic IAM Roles
-                "roles/browser",
-                "roles/viewer", 
-                "roles/editor",
-                "roles/owner",
-                # Storage Roles
-                "roles/storage.objectViewer",
-                "roles/storage.objectCreator", 
-                "roles/storage.objectAdmin",
-                # Compute Roles
-                "roles/compute.instanceAdmin",
-                "roles/compute.networkViewer",
-                # Logging & Monitoring
-                "roles/logging.logWriter",
-                "roles/monitoring.metricWriter",
-                # Security Roles
-                "roles/secretmanager.secretAccessor",
-                "roles/iam.serviceAccountUser",
-                "roles/iam.serviceAccountTokenCreator",
-                # Database Roles
-                "roles/cloudsql.client",
-                # Analytics Roles
-                "roles/bigquery.dataViewer",
-                "roles/bigquery.dataEditor",
-                # Serverless Roles
-                "roles/run.invoker",
-                "roles/cloudfunctions.invoker"
-            ]
-            
-            # Get current roles or default to empty list
-            current_roles = sa.get('roles', [])
-            form_roles = st.multiselect(
-                "IAM Roles",
-                common_roles,
-                default=current_roles,
-                key=f"sa_roles_{i}",
-                help="Select IAM roles to assign to this service account"
-            )
-
-            # Advanced service account options (collapsible)
-            with st.expander("🔧 Advanced Service Account Options", expanded=False):
-                col1, col2 = st.columns(2)
-                with col1:
-                    form_disabled = st.checkbox(
-                        "Disabled", 
-                        value=sa.get('disabled', False),
-                        key=f"sa_disabled_{i}"
+                    form_region = st.selectbox(
+                        "Region", ["us-central1", "us-west1", "europe-west1"],
+                        index=["us-central1", "us-west1", "europe-west1"].index(subnet.get('region', 'us-central1')),
+                        key=f"subnet_region_{i}"
                     )
-                with col2:
-                    form_ignore_exists = st.checkbox(
-                        "Ignore Already Exists", 
-                        value=sa.get('create_ignore_already_exists', False),
-                        key=f"sa_ignore_exists_{i}"
-                    )
-                
-                # Custom roles input
-                st.markdown("**Custom Roles:**")
-                form_custom_roles = st.text_area(
-                    "Custom IAM Roles (one per line)",
-                    value="\n".join([role for role in current_roles if role not in common_roles]),
-                    key=f"sa_custom_roles_{i}",
-                    help="Enter custom IAM roles that are not in the common list above"
-                )
-
-            # Key Management section
-            st.markdown("**Key Management:**")
-            form_create_key = st.checkbox(
-                "Create Service Account Key", 
-                value=sa.get('create_key', False),
-                key=f"sa_create_key_{i}",
-                help="Generate a new service account key for this service account"
-            )
-            
-            if form_create_key:
-                col1, col2 = st.columns(2)
-                with col1:
-                    form_key_algorithm = st.selectbox(
-                        "Key Algorithm",
-                        ["KEY_ALG_RSA_1024", "KEY_ALG_RSA_2048"],
-                        index=1 if sa.get('key_algorithm', 'KEY_ALG_RSA_2048') == 'KEY_ALG_RSA_2048' else 0,
-                        key=f"sa_key_algorithm_{i}"
-                    )
-                    form_public_key_type = st.selectbox(
-                        "Public Key Type",
-                        ["TYPE_NONE", "TYPE_X509_PEM_FILE", "TYPE_RAW_PUBLIC_KEY"],
-                        index=1 if sa.get('public_key_type', 'TYPE_X509_PEM_FILE') == 'TYPE_X509_PEM_FILE' else 0,
-                        key=f"sa_public_key_type_{i}"
-                    )
-                with col2:
-                    form_private_key_type = st.selectbox(
-                        "Private Key Type",
-                        ["TYPE_UNSPECIFIED", "TYPE_PKCS12_FILE", "TYPE_GOOGLE_CREDENTIALS_FILE"],
-                        index=2 if sa.get('private_key_type', 'TYPE_GOOGLE_CREDENTIALS_FILE') == 'TYPE_GOOGLE_CREDENTIALS_FILE' else 0,
-                        key=f"sa_private_key_type_{i}"
-                    )
-                    form_key_file_path = st.text_input(
-                        "Key File Path (optional)",
-                        value=sa.get('key_file_path', ''),
-                        placeholder="/path/to/save/key.json",
-                        key=f"sa_key_file_path_{i}",
-                        help="Optional: Path to save the service account key file"
-                    )
-
-            # Parse custom roles from text area
-            custom_roles = []
-            if form_custom_roles and form_custom_roles.strip():
-                custom_roles = [role.strip() for role in form_custom_roles.split('\n') if role.strip()]
-            
-            # Combine common roles and custom roles
-            all_roles = form_roles + custom_roles
-
-            # Update service account data
-            st.session_state.service_accounts[i] = {
-                "account_id": form_account_id,
-                "display_name": form_display_name,
-                "description": form_description if form_description and form_description.strip() else None,
-                "disabled": form_disabled,
-                "create_ignore_already_exists": form_ignore_exists,
-                "roles": all_roles,
-                "create_key": form_create_key,
-                "key_algorithm": form_key_algorithm if form_create_key else None,
-                "public_key_type": form_public_key_type if form_create_key else None,
-                "private_key_type": form_private_key_type if form_create_key else None,
-                "key_file_path": form_key_file_path if form_create_key and form_key_file_path and form_key_file_path.strip() else None
-            }
-
-        # Add button to create another service account
-        if st.button("➕ Add Another Service Account", key="add_sa_section"):
-            st.session_state.service_account_form_count += 1
-            st.rerun()
-
-        if st.session_state.service_accounts:
-            resources["service_accounts"] = st.session_state.service_accounts
-    
-    # IAM
-    if st.checkbox("🔐 Create IAM Policies"):
-        st.markdown("**IAM Configuration**")
-        if 'iam' not in st.session_state:
-            st.session_state.iam = []
-        if 'iam_form_count' not in st.session_state:
-            st.session_state.iam_form_count = 1
-
-        for i in range(st.session_state.iam_form_count):
-            if i > 0:
-                st.markdown("---")
-
-            # Ensure data object exists
-            if i >= len(st.session_state.iam):
-                st.session_state.iam.append({
-                    "iam_type": "member",
-                    "role": "roles/viewer",
-                    "member": "user:example@domain.com",
-                    "members": [],
-                    "policy_data": None,
-                    "service": None,
-                    "audit_log_configs": [],
-                    "condition": None
-                })
-
-            binding = st.session_state.iam[i]
-
-            st.markdown(f"**IAM Policy {i+1}:**")
-            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-            with col1:
-                form_iam_type = st.selectbox(
-                    "IAM Type",
-                    ["member", "binding", "policy", "audit_config"],
-                    index=["member", "binding", "policy", "audit_config"].index(binding.get('iam_type', 'member')),
-                    key=f"iam_type_{i}"
-                )
-            with col2:
-                if form_iam_type in ["member", "binding"]:
-                    # Common IAM roles
-                    common_roles = [
-                        "Custom Role",  # Allow custom role input
-                        "roles/owner",
-                        "roles/editor", 
-                        "roles/viewer",
-                        "roles/browser",
-                        "roles/iam.serviceAccountUser",
-                        "roles/iam.serviceAccountTokenCreator",
-                        "roles/iam.serviceAccountKeyAdmin",
-                        "roles/iam.serviceAccountAdmin",
-                        "roles/iam.organizationRoleAdmin",
-                        "roles/iam.roleAdmin",
-                        "roles/iam.workloadIdentityUser",
-                        "roles/storage.admin",
-                        "roles/storage.objectAdmin",
-                        "roles/storage.objectCreator",
-                        "roles/storage.objectViewer",
-                        "roles/compute.admin",
-                        "roles/compute.instanceAdmin",
-                        "roles/compute.instanceAdmin.v1",
-                        "roles/compute.networkAdmin",
-                        "roles/compute.securityAdmin",
-                        "roles/compute.viewer",
-                        "roles/container.admin",
-                        "roles/container.clusterAdmin",
-                        "roles/container.developer",
-                        "roles/container.viewer",
-                        "roles/cloudsql.admin",
-                        "roles/cloudsql.client",
-                        "roles/cloudsql.viewer",
-                        "roles/secretmanager.admin",
-                        "roles/secretmanager.secretAccessor",
-                        "roles/secretmanager.viewer",
-                        "roles/pubsub.admin",
-                        "roles/pubsub.editor",
-                        "roles/pubsub.publisher",
-                        "roles/pubsub.subscriber",
-                        "roles/pubsub.viewer",
-                        "roles/cloudfunctions.admin",
-                        "roles/cloudfunctions.developer",
-                        "roles/cloudfunctions.invoker",
-                        "roles/cloudfunctions.viewer",
-                        "roles/run.admin",
-                        "roles/run.developer",
-                        "roles/run.invoker",
-                        "roles/run.viewer",
-                        "roles/logging.admin",
-                        "roles/logging.viewer",
-                        "roles/monitoring.admin",
-                        "roles/monitoring.viewer",
-                        "roles/securitycenter.admin",
-                        "roles/securitycenter.viewer",
-                        "roles/dns.admin",
-                        "roles/dns.reader",
-                        "roles/firebase.admin",
-                        "roles/firebase.analyticsAdmin",
-                        "roles/firebase.analyticsViewer",
-                        "roles/bigquery.admin",
-                        "roles/bigquery.dataEditor",
-                        "roles/bigquery.dataViewer",
-                        "roles/bigquery.jobUser",
-                        "roles/bigquery.user",
-                        "roles/artifactregistry.admin",
-                        "roles/artifactregistry.reader",
-                        "roles/artifactregistry.writer"
-                    ]
-                    
-                    # Get current role value
-                    current_role = binding.get('role', '')
-                    
-                    # If current role is not in the list, add it as custom option
-                    if current_role and current_role not in common_roles:
-                        common_roles.insert(0, current_role)
-                    
-                    form_role = st.selectbox(
-                        "Role", 
-                        options=common_roles,
-                        index=common_roles.index(current_role) if current_role in common_roles else 0,
-                        key=f"iam_role_{i}",
-                        help="Select a predefined role or choose custom for manual entry"
-                    )
-                    
-                    # Show custom role input if "Custom Role" is selected
-                    if form_role == "Custom Role":
-                        form_role = st.text_input(
-                            "Custom Role", 
-                            value="",
-                            placeholder="roles/custom.role",
-                            key=f"iam_custom_role_{i}"
-                        )
-                elif form_iam_type == "policy":
-                    form_policy_data = st.text_area(
-                        "Policy Data (JSON)", 
-                        value=binding.get('policy_data', ''),
-                        placeholder='{"bindings": [{"role": "roles/viewer", "members": ["user:example@domain.com"]}]}',
-                        key=f"iam_policy_data_{i}"
-                    )
-                else:  # audit_config
-                    form_service = st.text_input(
-                        "Service", 
-                        value=binding.get('service', ''),
-                        placeholder="allServices or compute.googleapis.com",
-                        key=f"iam_service_{i}"
-                    )
-            with col3:
-                if form_iam_type == "member":
-                    form_member = st.text_input(
-                        "Member", 
-                        value=binding.get('member', ''),
-                        placeholder="user:example@domain.com",
-                        key=f"iam_member_{i}"
-                    )
-                elif form_iam_type == "binding":
-                    form_members = st.text_area(
-                        "Members (one per line)", 
-                        value="\n".join(binding.get('members', [])),
-                        placeholder="user:example@domain.com\nserviceAccount:sa@project.iam.gserviceaccount.com",
-                        key=f"iam_members_{i}"
-                    )
-                elif form_iam_type == "audit_config":
-                    form_audit_logs = st.text_area(
-                        "Audit Log Configs (JSON)", 
-                        value=json.dumps(binding.get('audit_log_configs', []), indent=2),
-                        placeholder='[{"log_type": "ADMIN_READ", "exempted_members": []}]',
-                        key=f"iam_audit_logs_{i}"
-                    )
-            with col4:
-                if st.button("🗑️", key=f"del_iam_{i}"):
-                    st.session_state.iam.pop(i)
-                    st.session_state.iam_form_count -= 1
-                    st.rerun()
-
-            # IAM Conditions (for member and binding types)
-            if form_iam_type in ["member", "binding"]:
-                with st.expander("🔧 IAM Conditions (Optional)", expanded=False):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        form_condition_title = st.text_input(
-                            "Condition Title", 
-                            value=binding.get('condition', {}).get('title', '') if binding.get('condition') else '',
-                            placeholder="expires_after_2024",
-                            key=f"iam_condition_title_{i}"
-                        )
-                    with col2:
-                        form_condition_expression = st.text_input(
-                            "Condition Expression", 
-                            value=binding.get('condition', {}).get('expression', '') if binding.get('condition') else '',
-                            placeholder='request.time < timestamp("2024-12-31T23:59:59Z")',
-                            key=f"iam_condition_expression_{i}"
-                        )
-                    form_condition_description = st.text_input(
-                        "Condition Description (Optional)", 
-                        value=binding.get('condition', {}).get('description', '') if binding.get('condition') else '',
-                        placeholder="Access expires at end of 2024",
-                        key=f"iam_condition_description_{i}"
-                    )
-
-            # Parse data based on IAM type
-            if form_iam_type == "member":
-                members_list = []
-                condition = None
-                if form_condition_title and form_condition_expression:
-                    condition = {
-                        "title": form_condition_title,
-                        "expression": form_condition_expression,
-                        "description": form_condition_description if form_condition_description else None
-                    }
-            elif form_iam_type == "binding":
-                members_list = [m.strip() for m in form_members.split('\n') if m.strip()] if form_members else []
-                condition = None
-                if form_condition_title and form_condition_expression:
-                    condition = {
-                        "title": form_condition_title,
-                        "expression": form_condition_expression,
-                        "description": form_condition_description if form_condition_description else None
-                    }
-            elif form_iam_type == "policy":
-                policy_data = form_policy_data if form_policy_data and form_policy_data.strip() else None
-            elif form_iam_type == "audit_config":
-                try:
-                    audit_logs = json.loads(form_audit_logs) if form_audit_logs and form_audit_logs.strip() else []
-                except json.JSONDecodeError:
-                    audit_logs = []
-
-            # Update IAM binding data
-            if form_iam_type == "member":
-                st.session_state.iam[i] = {
-                    "iam_type": form_iam_type,
-                    "role": form_role,
-                    "member": form_member,
-                    "members": [],
-                    "policy_data": None,
-                    "service": None,
-                    "audit_log_configs": [],
-                    "condition": condition
-                }
-            elif form_iam_type == "binding":
-                st.session_state.iam[i] = {
-                    "iam_type": form_iam_type,
-                    "role": form_role,
-                    "member": None,
-                    "members": members_list,
-                    "policy_data": None,
-                    "service": None,
-                    "audit_log_configs": [],
-                    "condition": condition
-                }
-            elif form_iam_type == "policy":
-                st.session_state.iam[i] = {
-                    "iam_type": form_iam_type,
-                    "role": None,
-                    "member": None,
-                    "members": [],
-                    "policy_data": policy_data,
-                    "service": None,
-                    "audit_log_configs": [],
-                    "condition": None
-                }
-            elif form_iam_type == "audit_config":
-                st.session_state.iam[i] = {
-                    "iam_type": form_iam_type,
-                    "role": None,
-                    "member": None,
-                    "members": [],
-                    "policy_data": None,
-                    "service": form_service,
-                    "audit_log_configs": audit_logs,
-                    "condition": None
-                }
-
-        # Add button to create another IAM policy
-        if st.button("➕ Add Another IAM Policy", key="add_iam_section"):
-            st.session_state.iam_form_count += 1
-            st.rerun()
-
-        if st.session_state.iam:
-            resources["iam"] = st.session_state.iam
-    
-    # Compute Instances
-    if st.checkbox("💻 Create Compute Instances"):
-        st.markdown("**VM Configuration**")
-        if 'compute_instances' not in st.session_state:
-            st.session_state.compute_instances = []
-
-        # ---- Pricing helpers (approximate) ----
-        def infer_vcpu_and_memory(machine_type: str) -> tuple[float, float]:
-            mt = (machine_type or "").lower()
-            # Known presets
-            presets = {
-                "e2-micro": (0.25, 1),
-                "e2-small": (0.5, 2),
-                "e2-medium": (2, 4),
-                "e2-standard-2": (2, 8),
-                "e2-standard-4": (4, 16),
-                "n2-standard-2": (2, 8),
-                "n2-standard-4": (4, 16),
-            }
-            if mt in presets:
-                return presets[mt]
-            # Heuristic: standard-N => vcpu=N, mem=4GB per vCPU
-            import re
-            m = re.search(r"-(\d+)$", mt)
-            if m:
-                vcpu = float(m.group(1))
-                mem = vcpu * 4.0
-                return (vcpu, mem)
-            # Fallback
-            return (2.0, 8.0)
-
-        def estimate_vm_cost_monthly(vm: dict) -> dict:
-            # Approximate hourly pricing model (us-central1):
-            # hourly_compute = vcpu*0.03 + mem_gb*0.005
-            vcpu, mem_gb = infer_vcpu_and_memory(vm.get('machine_type', 'e2-standard-2'))
-            hourly_compute = vcpu * 0.03 + mem_gb * 0.005
-            # Disk pricing (balanced): $0.10 per GB-month; SSD: $0.17; standard: $0.04
-            size_gb = (vm.get('boot_disk_size_gb') or 10)
-            dtype = (vm.get('boot_disk_type') or 'pd-balanced').lower()
-            per_gb_month = 0.10 if 'balanced' in dtype else (0.17 if 'ssd' in dtype else 0.04)
-            disk_month = size_gb * per_gb_month
-            monthly_compute = hourly_compute * 730.0
-            total = monthly_compute + disk_month
-            return {
-                "vcpu": vcpu,
-                "mem_gb": mem_gb,
-                "hourly_compute": hourly_compute,
-                "monthly_compute": monthly_compute,
-                "disk_month": disk_month,
-                "total": total,
-            }
-
-        # ---- Machine series specifications ----
-        def get_machine_series_data() -> list:
-            """Return machine series data for table display"""
-            return [
-                {"Series": "C4", "Description": "Consistently high performance", "vCPUs": "2 - 288", "Memory": "4 - 2,232 GB", "CPU Platform": "Intel Emerald Rapids"},
-                {"Series": "C4A", "Description": "Arm-based consistently high performance", "vCPUs": "1 - 72", "Memory": "2 - 576 GB", "CPU Platform": "Google Axion"},
-                {"Series": "C4D", "Description": "Consistently high performance", "vCPUs": "2 - 384", "Memory": "3 - 3,072 GB", "CPU Platform": "AMD Turin"},
-                {"Series": "N4", "Description": "Flexible & cost-optimized", "vCPUs": "2 - 80", "Memory": "4 - 640 GB", "CPU Platform": "Intel Emerald Rapids"},
-                {"Series": "C3", "Description": "Consistently high performance", "vCPUs": "4 - 192", "Memory": "8 - 1,536 GB", "CPU Platform": "Intel Sapphire Rapids"},
-                {"Series": "C3D", "Description": "Consistently high performance", "vCPUs": "4 - 360", "Memory": "8 - 2,880 GB", "CPU Platform": "AMD Genoa"},
-                {"Series": "E2", "Description": "Low cost, day-to-day computing", "vCPUs": "0.25 - 32", "Memory": "1 - 128 GB", "CPU Platform": "Intel Broadwell"},
-                {"Series": "N2", "Description": "Balanced price & performance", "vCPUs": "2 - 128", "Memory": "2 - 864 GB", "CPU Platform": "Intel Cascade Lake"},
-                {"Series": "N2D", "Description": "Balanced price & performance", "vCPUs": "2 - 224", "Memory": "2 - 896 GB", "CPU Platform": "AMD Milan"},
-                {"Series": "T2A", "Description": "Scale-out workloads", "vCPUs": "1 - 48", "Memory": "4 - 192 GB", "CPU Platform": "Ampere Altra"},
-                {"Series": "T2D", "Description": "Scale-out workloads", "vCPUs": "1 - 60", "Memory": "4 - 240 GB", "CPU Platform": "AMD Milan"},
-                {"Series": "N1", "Description": "Balanced price & performance", "vCPUs": "0.25 - 96", "Memory": "0.6 - 624 GB", "CPU Platform": "Intel Haswell"}
-            ]
-        
-        def get_series_presets(series: str) -> Dict[str, list]:
-            """Get presets for a specific series"""
-            presets = {
-                "C4": {
-                    "Standard": [
-                        ("c4-standard-2", "2 vCPU (1 core), 7 GB memory"),
-                        ("c4-standard-4", "4 vCPU (2 core), 15 GB memory"),
-                        ("c4-standard-8", "8 vCPU (4 core), 30 GB memory"),
-                        ("c4-standard-16", "16 vCPU (8 core), 60 GB memory"),
-                        ("c4-standard-24", "24 vCPU (12 core), 90 GB memory"),
-                        ("c4-standard-32", "32 vCPU (16 core), 120 GB memory"),
-                        ("c4-standard-48", "48 vCPU (24 core), 180 GB memory"),
-                        ("c4-standard-96", "96 vCPU (48 core), 360 GB memory"),
-                        ("c4-standard-144", "144 vCPU (72 core), 540 GB memory"),
-                        ("c4-standard-192", "192 vCPU (96 core), 720 GB memory"),
-                        ("c4-standard-288", "288 vCPU (144 core), 1,080 GB memory"),
-                        ("c4-standard-288-metal", "288 vCPU, 1,080 GB memory")
-                    ],
-                    "Standard with local SSD": [
-                        ("c4-standard-4-lssd", "4 vCPU (2 core), 15 GB memory, 1 Local SSD disks"),
-                        ("c4-standard-8-lssd", "8 vCPU (4 core), 30 GB memory, 1 Local SSD disks"),
-                        ("c4-standard-16-lssd", "16 vCPU (8 core), 60 GB memory, 2 Local SSD disks"),
-                        ("c4-standard-24-lssd", "24 vCPU (12 core), 90 GB memory, 4 Local SSD disks"),
-                        ("c4-standard-32-lssd", "32 vCPU (16 core), 120 GB memory, 5 Local SSD disks"),
-                        ("c4-standard-48-lssd", "48 vCPU (24 core), 180 GB memory, 8 Local SSD disks"),
-                        ("c4-standard-96-lssd", "96 vCPU (48 core), 360 GB memory, 16 Local SSD disks"),
-                        ("c4-standard-144-lssd", "144 vCPU (72 core), 540 GB memory, 24 Local SSD disks"),
-                        ("c4-standard-192-lssd", "192 vCPU (96 core), 720 GB memory, 32 Local SSD disks"),
-                        ("c4-standard-288-lssd", "288 vCPU (144 core), 1,080 GB memory, 48 Local SSD disks")
-                    ],
-                    "High memory": [
-                        ("c4-highmem-2", "2 vCPU (1 core), 15 GB memory"),
-                        ("c4-highmem-4", "4 vCPU (2 core), 31 GB memory"),
-                        ("c4-highmem-8", "8 vCPU (4 core), 62 GB memory"),
-                        ("c4-highmem-16", "16 vCPU (8 core), 124 GB memory"),
-                        ("c4-highmem-24", "24 vCPU (12 core), 186 GB memory"),
-                        ("c4-highmem-32", "32 vCPU (16 core), 248 GB memory"),
-                        ("c4-highmem-48", "48 vCPU (24 core), 372 GB memory"),
-                        ("c4-highmem-96", "96 vCPU (48 core), 744 GB memory"),
-                        ("c4-highmem-144", "144 vCPU (72 core), 1,116 GB memory"),
-                        ("c4-highmem-192", "192 vCPU (96 core), 1,488 GB memory"),
-                        ("c4-highmem-288", "288 vCPU (144 core), 2,232 GB memory"),
-                        ("c4-highmem-288-metal", "288 vCPU, 2,232 GB memory")
-                    ],
-                    "High memory with local SSD": [
-                        ("c4-highmem-4-lssd", "4 vCPU (2 core), 31 GB memory, 1 Local SSD disks"),
-                        ("c4-highmem-8-lssd", "8 vCPU (4 core), 62 GB memory, 1 Local SSD disks"),
-                        ("c4-highmem-16-lssd", "16 vCPU (8 core), 124 GB memory, 2 Local SSD disks"),
-                        ("c4-highmem-24-lssd", "24 vCPU (12 core), 186 GB memory, 4 Local SSD disks"),
-                        ("c4-highmem-32-lssd", "32 vCPU (16 core), 248 GB memory, 5 Local SSD disks"),
-                        ("c4-highmem-48-lssd", "48 vCPU (24 core), 372 GB memory, 8 Local SSD disks"),
-                        ("c4-highmem-96-lssd", "96 vCPU (48 core), 744 GB memory, 16 Local SSD disks"),
-                        ("c4-highmem-144-lssd", "144 vCPU (72 core), 1,116 GB memory, 24 Local SSD disks"),
-                        ("c4-highmem-192-lssd", "192 vCPU (96 core), 1,488 GB memory, 32 Local SSD disks"),
-                        ("c4-highmem-288-lssd", "288 vCPU (144 core), 2,232 GB memory, 48 Local SSD disks")
-                    ],
-                    "High CPU": [
-                        ("c4-highcpu-2", "2 vCPU (1 core), 4 GB memory"),
-                        ("c4-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
-                        ("c4-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
-                        ("c4-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
-                        ("c4-highcpu-24", "24 vCPU (12 core), 48 GB memory"),
-                        ("c4-highcpu-32", "32 vCPU (16 core), 64 GB memory"),
-                        ("c4-highcpu-48", "48 vCPU (24 core), 96 GB memory"),
-                        ("c4-highcpu-96", "96 vCPU (48 core), 192 GB memory"),
-                        ("c4-highcpu-144", "144 vCPU (72 core), 288 GB memory"),
-                        ("c4-highcpu-192", "192 vCPU (96 core), 384 GB memory"),
-                        ("c4-highcpu-288", "288 vCPU (144 core), 576 GB memory")
-                    ]
-                },
-                "C4A": {
-                    "Standard": [
-                        ("c4a-standard-1", "1 vCPU, 4 GB memory"),
-                        ("c4a-standard-2", "2 vCPU, 8 GB memory"),
-                        ("c4a-standard-4", "4 vCPU, 16 GB memory"),
-                        ("c4a-standard-8", "8 vCPU, 32 GB memory"),
-                        ("c4a-standard-16", "16 vCPU, 64 GB memory"),
-                        ("c4a-standard-32", "32 vCPU, 128 GB memory"),
-                        ("c4a-standard-48", "48 vCPU, 192 GB memory"),
-                        ("c4a-standard-64", "64 vCPU, 256 GB memory"),
-                        ("c4a-standard-72", "72 vCPU, 288 GB memory")
-                    ],
-                    "Standard with local SSD": [
-                        ("c4a-standard-4-lssd", "4 vCPU, 16 GB memory, 1 Local SSD disks"),
-                        ("c4a-standard-8-lssd", "8 vCPU, 32 GB memory, 2 Local SSD disks"),
-                        ("c4a-standard-16-lssd", "16 vCPU, 64 GB memory, 4 Local SSD disks"),
-                        ("c4a-standard-32-lssd", "32 vCPU, 128 GB memory, 6 Local SSD disks"),
-                        ("c4a-standard-48-lssd", "48 vCPU, 192 GB memory, 10 Local SSD disks"),
-                        ("c4a-standard-64-lssd", "64 vCPU, 256 GB memory, 14 Local SSD disks"),
-                        ("c4a-standard-72-lssd", "72 vCPU, 288 GB memory, 16 Local SSD disks")
-                    ],
-                    "High memory": [
-                        ("c4a-highmem-1", "1 vCPU, 8 GB memory"),
-                        ("c4a-highmem-2", "2 vCPU, 16 GB memory"),
-                        ("c4a-highmem-4", "4 vCPU, 32 GB memory"),
-                        ("c4a-highmem-8", "8 vCPU, 64 GB memory"),
-                        ("c4a-highmem-16", "16 vCPU, 128 GB memory"),
-                        ("c4a-highmem-32", "32 vCPU, 256 GB memory"),
-                        ("c4a-highmem-48", "48 vCPU, 384 GB memory"),
-                        ("c4a-highmem-64", "64 vCPU, 512 GB memory"),
-                        ("c4a-highmem-72", "72 vCPU, 576 GB memory")
-                    ],
-                    "High memory with local SSD": [
-                        ("c4a-highmem-4-lssd", "4 vCPU, 32 GB memory, 1 Local SSD disks"),
-                        ("c4a-highmem-8-lssd", "8 vCPU, 64 GB memory, 2 Local SSD disks"),
-                        ("c4a-highmem-16-lssd", "16 vCPU, 128 GB memory, 4 Local SSD disks"),
-                        ("c4a-highmem-32-lssd", "32 vCPU, 256 GB memory, 6 Local SSD disks"),
-                        ("c4a-highmem-48-lssd", "48 vCPU, 384 GB memory, 10 Local SSD disks"),
-                        ("c4a-highmem-64-lssd", "64 vCPU, 512 GB memory, 14 Local SSD disks"),
-                        ("c4a-highmem-72-lssd", "72 vCPU, 576 GB memory, 16 Local SSD disks")
-                    ],
-                    "High CPU": [
-                        ("c4a-highcpu-1", "1 vCPU, 2 GB memory"),
-                        ("c4a-highcpu-2", "2 vCPU, 4 GB memory"),
-                        ("c4a-highcpu-4", "4 vCPU, 8 GB memory"),
-                        ("c4a-highcpu-8", "8 vCPU, 16 GB memory"),
-                        ("c4a-highcpu-16", "16 vCPU, 32 GB memory"),
-                        ("c4a-highcpu-32", "32 vCPU, 64 GB memory"),
-                        ("c4a-highcpu-48", "48 vCPU, 96 GB memory"),
-                        ("c4a-highcpu-64", "64 vCPU, 128 GB memory"),
-                        ("c4a-highcpu-72", "72 vCPU, 144 GB memory")
-                    ]
-                },
-                "C4D": {
-                    "Standard": [
-                        ("c4d-standard-2", "2 vCPU (1 core), 7 GB memory"),
-                        ("c4d-standard-4", "4 vCPU (2 core), 15 GB memory"),
-                        ("c4d-standard-8", "8 vCPU (4 core), 31 GB memory"),
-                        ("c4d-standard-16", "16 vCPU (8 core), 62 GB memory"),
-                        ("c4d-standard-32", "32 vCPU (16 core), 124 GB memory"),
-                        ("c4d-standard-48", "48 vCPU (24 core), 186 GB memory"),
-                        ("c4d-standard-64", "64 vCPU (32 core), 248 GB memory"),
-                        ("c4d-standard-96", "96 vCPU (48 core), 372 GB memory"),
-                        ("c4d-standard-192", "192 vCPU (96 core), 744 GB memory"),
-                        ("c4d-standard-384", "384 vCPU (192 core), 1,488 GB memory"),
-                        ("c4d-standard-384-metal", "384 vCPU, 1,536 GB memory")
-                    ],
-                    "Standard with local SSD": [
-                        ("c4d-standard-8-lssd", "8 vCPU (4 core), 31 GB memory, 1 Local SSD disks"),
-                        ("c4d-standard-16-lssd", "16 vCPU (8 core), 62 GB memory, 1 Local SSD disks"),
-                        ("c4d-standard-32-lssd", "32 vCPU (16 core), 124 GB memory, 2 Local SSD disks"),
-                        ("c4d-standard-48-lssd", "48 vCPU (24 core), 186 GB memory, 4 Local SSD disks"),
-                        ("c4d-standard-64-lssd", "64 vCPU (32 core), 248 GB memory, 6 Local SSD disks"),
-                        ("c4d-standard-96-lssd", "96 vCPU (48 core), 372 GB memory, 8 Local SSD disks"),
-                        ("c4d-standard-192-lssd", "192 vCPU (96 core), 744 GB memory, 16 Local SSD disks"),
-                        ("c4d-standard-384-lssd", "384 vCPU (192 core), 1,488 GB memory, 32 Local SSD disks")
-                    ],
-                    "High memory": [
-                        ("c4d-highmem-2", "2 vCPU (1 core), 15 GB memory"),
-                        ("c4d-highmem-4", "4 vCPU (2 core), 31 GB memory"),
-                        ("c4d-highmem-8", "8 vCPU (4 core), 63 GB memory"),
-                        ("c4d-highmem-16", "16 vCPU (8 core), 126 GB memory"),
-                        ("c4d-highmem-32", "32 vCPU (16 core), 252 GB memory"),
-                        ("c4d-highmem-48", "48 vCPU (24 core), 378 GB memory"),
-                        ("c4d-highmem-64", "64 vCPU (32 core), 504 GB memory"),
-                        ("c4d-highmem-96", "96 vCPU (48 core), 756 GB memory"),
-                        ("c4d-highmem-192", "192 vCPU (96 core), 1,512 GB memory"),
-                        ("c4d-highmem-384", "384 vCPU (192 core), 3,024 GB memory"),
-                        ("c4d-highmem-384-metal", "384 vCPU, 3,072 GB memory")
-                    ],
-                    "High memory with local SSD": [
-                        ("c4d-highmem-8-lssd", "8 vCPU (4 core), 63 GB memory, 1 Local SSD disks"),
-                        ("c4d-highmem-16-lssd", "16 vCPU (8 core), 126 GB memory, 1 Local SSD disks"),
-                        ("c4d-highmem-32-lssd", "32 vCPU (16 core), 252 GB memory, 2 Local SSD disks"),
-                        ("c4d-highmem-48-lssd", "48 vCPU (24 core), 378 GB memory, 4 Local SSD disks"),
-                        ("c4d-highmem-64-lssd", "64 vCPU (32 core), 504 GB memory, 6 Local SSD disks"),
-                        ("c4d-highmem-96-lssd", "96 vCPU (48 core), 756 GB memory, 8 Local SSD disks"),
-                        ("c4d-highmem-192-lssd", "192 vCPU (96 core), 1,512 GB memory, 16 Local SSD disks"),
-                        ("c4d-highmem-384-lssd", "384 vCPU (192 core), 3,024 GB memory, 32 Local SSD disks")
-                    ],
-                    "High CPU": [
-                        ("c4d-highcpu-2", "2 vCPU (1 core), 3 GB memory"),
-                        ("c4d-highcpu-4", "4 vCPU (2 core), 7 GB memory"),
-                        ("c4d-highcpu-8", "8 vCPU (4 core), 15 GB memory"),
-                        ("c4d-highcpu-16", "16 vCPU (8 core), 30 GB memory"),
-                        ("c4d-highcpu-32", "32 vCPU (16 core), 60 GB memory"),
-                        ("c4d-highcpu-48", "48 vCPU (24 core), 90 GB memory"),
-                        ("c4d-highcpu-64", "64 vCPU (32 core), 120 GB memory"),
-                        ("c4d-highcpu-96", "96 vCPU (48 core), 180 GB memory"),
-                        ("c4d-highcpu-192", "192 vCPU (96 core), 360 GB memory"),
-                        ("c4d-highcpu-384", "384 vCPU (192 core), 720 GB memory"),
-                        ("c4d-highcpu-384-metal", "384 vCPU, 768 GB memory")
-                    ]
-                },
-                "N4": {
-                    "Standard": [
-                        ("n4-standard-2", "2 vCPU (1 core), 8 GB memory"),
-                        ("n4-standard-4", "4 vCPU (2 core), 16 GB memory"),
-                        ("n4-standard-8", "8 vCPU (4 core), 32 GB memory"),
-                        ("n4-standard-16", "16 vCPU (8 core), 64 GB memory"),
-                        ("n4-standard-32", "32 vCPU (16 core), 128 GB memory"),
-                        ("n4-standard-48", "48 vCPU (24 core), 192 GB memory"),
-                        ("n4-standard-64", "64 vCPU (32 core), 256 GB memory"),
-                        ("n4-standard-80", "80 vCPU (40 core), 320 GB memory")
-                    ],
-                    "High memory": [
-                        ("n4-highmem-2", "2 vCPU (1 core), 16 GB memory"),
-                        ("n4-highmem-4", "4 vCPU (2 core), 32 GB memory"),
-                        ("n4-highmem-8", "8 vCPU (4 core), 64 GB memory"),
-                        ("n4-highmem-16", "16 vCPU (8 core), 128 GB memory"),
-                        ("n4-highmem-32", "32 vCPU (16 core), 256 GB memory"),
-                        ("n4-highmem-48", "48 vCPU (24 core), 384 GB memory"),
-                        ("n4-highmem-64", "64 vCPU (32 core), 512 GB memory"),
-                        ("n4-highmem-80", "80 vCPU (40 core), 640 GB memory")
-                    ],
-                    "High CPU": [
-                        ("n4-highcpu-2", "2 vCPU (1 core), 4 GB memory"),
-                        ("n4-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
-                        ("n4-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
-                        ("n4-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
-                        ("n4-highcpu-32", "32 vCPU (16 core), 64 GB memory"),
-                        ("n4-highcpu-48", "48 vCPU (24 core), 96 GB memory"),
-                        ("n4-highcpu-64", "64 vCPU (32 core), 128 GB memory"),
-                        ("n4-highcpu-80", "80 vCPU (40 core), 160 GB memory")
-                    ]
-                },
-                "C3": {
-                    "Standard": [
-                        ("c3-standard-4", "4 vCPU (2 core), 16 GB memory"),
-                        ("c3-standard-8", "8 vCPU (4 core), 32 GB memory"),
-                        ("c3-standard-22", "22 vCPU (11 core), 88 GB memory"),
-                        ("c3-standard-44", "44 vCPU (22 core), 176 GB memory"),
-                        ("c3-standard-88", "88 vCPU (44 core), 352 GB memory"),
-                        ("c3-standard-176", "176 vCPU (88 core), 704 GB memory"),
-                        ("c3-standard-192-metal", "192 vCPU, 768 GB memory")
-                    ],
-                    "Standard with local SSD": [
-                        ("c3-standard-4-lssd", "4 vCPU (2 core), 16 GB memory, 1 Local SSD disks"),
-                        ("c3-standard-8-lssd", "8 vCPU (4 core), 32 GB memory, 2 Local SSD disks"),
-                        ("c3-standard-22-lssd", "22 vCPU (11 core), 88 GB memory, 4 Local SSD disks"),
-                        ("c3-standard-44-lssd", "44 vCPU (22 core), 176 GB memory, 8 Local SSD disks"),
-                        ("c3-standard-88-lssd", "88 vCPU (44 core), 352 GB memory, 16 Local SSD disks"),
-                        ("c3-standard-176-lssd", "176 vCPU (88 core), 704 GB memory, 32 Local SSD disks")
-                    ],
-                    "High memory": [
-                        ("c3-highmem-4", "4 vCPU (2 core), 32 GB memory"),
-                        ("c3-highmem-8", "8 vCPU (4 core), 64 GB memory"),
-                        ("c3-highmem-22", "22 vCPU (11 core), 176 GB memory"),
-                        ("c3-highmem-44", "44 vCPU (22 core), 352 GB memory"),
-                        ("c3-highmem-88", "88 vCPU (44 core), 704 GB memory"),
-                        ("c3-highmem-176", "176 vCPU (88 core), 1,408 GB memory"),
-                        ("c3-highmem-192-metal", "192 vCPU, 1,536 GB memory")
-                    ],
-                    "High CPU": [
-                        ("c3-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
-                        ("c3-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
-                        ("c3-highcpu-22", "22 vCPU (11 core), 44 GB memory"),
-                        ("c3-highcpu-44", "44 vCPU (22 core), 88 GB memory"),
-                        ("c3-highcpu-88", "88 vCPU (44 core), 176 GB memory"),
-                        ("c3-highcpu-176", "176 vCPU (88 core), 352 GB memory"),
-                        ("c3-highcpu-192-metal", "192 vCPU, 512 GB memory")
-                    ]
-                },
-                "C3D": {
-                    "Standard": [
-                        ("c3d-standard-4", "4 vCPU (2 core), 16 GB memory"),
-                        ("c3d-standard-8", "8 vCPU (4 core), 32 GB memory"),
-                        ("c3d-standard-16", "16 vCPU (8 core), 64 GB memory"),
-                        ("c3d-standard-30", "30 vCPU (15 core), 120 GB memory"),
-                        ("c3d-standard-60", "60 vCPU (30 core), 240 GB memory"),
-                        ("c3d-standard-90", "90 vCPU (45 core), 360 GB memory"),
-                        ("c3d-standard-180", "180 vCPU (90 core), 720 GB memory"),
-                        ("c3d-standard-360", "360 vCPU (180 core), 1,440 GB memory")
-                    ],
-                    "Standard with local SSD": [
-                        ("c3d-standard-8-lssd", "8 vCPU (4 core), 32 GB memory, 1 Local SSD disks"),
-                        ("c3d-standard-16-lssd", "16 vCPU (8 core), 64 GB memory, 1 Local SSD disks"),
-                        ("c3d-standard-30-lssd", "30 vCPU (15 core), 120 GB memory, 2 Local SSD disks"),
-                        ("c3d-standard-60-lssd", "60 vCPU (30 core), 240 GB memory, 4 Local SSD disks"),
-                        ("c3d-standard-90-lssd", "90 vCPU (45 core), 360 GB memory, 8 Local SSD disks"),
-                        ("c3d-standard-180-lssd", "180 vCPU (90 core), 720 GB memory, 16 Local SSD disks"),
-                        ("c3d-standard-360-lssd", "360 vCPU (180 core), 1,440 GB memory, 32 Local SSD disks")
-                    ],
-                    "High memory": [
-                        ("c3d-highmem-4", "4 vCPU (2 core), 32 GB memory"),
-                        ("c3d-highmem-8", "8 vCPU (4 core), 64 GB memory"),
-                        ("c3d-highmem-16", "16 vCPU (8 core), 128 GB memory"),
-                        ("c3d-highmem-30", "30 vCPU (15 core), 240 GB memory"),
-                        ("c3d-highmem-60", "60 vCPU (30 core), 480 GB memory"),
-                        ("c3d-highmem-90", "90 vCPU (45 core), 720 GB memory"),
-                        ("c3d-highmem-180", "180 vCPU (90 core), 1,440 GB memory"),
-                        ("c3d-highmem-360", "360 vCPU (180 core), 2,880 GB memory")
-                    ],
-                    "High memory with local SSD": [
-                        ("c3d-highmem-8-lssd", "8 vCPU (4 core), 64 GB memory, 1 Local SSD disks"),
-                        ("c3d-highmem-16-lssd", "16 vCPU (8 core), 128 GB memory, 1 Local SSD disks"),
-                        ("c3d-highmem-30-lssd", "30 vCPU (15 core), 240 GB memory, 2 Local SSD disks"),
-                        ("c3d-highmem-60-lssd", "60 vCPU (30 core), 480 GB memory, 4 Local SSD disks"),
-                        ("c3d-highmem-90-lssd", "90 vCPU (45 core), 720 GB memory, 8 Local SSD disks"),
-                        ("c3d-highmem-180-lssd", "180 vCPU (90 core), 1,440 GB memory, 16 Local SSD disks"),
-                        ("c3d-highmem-360-lssd", "360 vCPU (180 core), 2,880 GB memory, 32 Local SSD disks")
-                    ],
-                    "High CPU": [
-                        ("c3d-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
-                        ("c3d-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
-                        ("c3d-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
-                        ("c3d-highcpu-30", "30 vCPU (15 core), 59 GB memory"),
-                        ("c3d-highcpu-60", "60 vCPU (30 core), 118 GB memory"),
-                        ("c3d-highcpu-90", "90 vCPU (45 core), 177 GB memory"),
-                        ("c3d-highcpu-180", "180 vCPU (90 core), 354 GB memory"),
-                        ("c3d-highcpu-360", "360 vCPU (180 core), 708 GB memory")
-                    ]
-                },
-                "E2": {
-                    "Shared-core": [
-                        ("e2-micro", "0.25-2 vCPU (1 shared core), 1 GB memory"),
-                        ("e2-small", "0.5-2 vCPU (1 shared core), 2 GB memory"),
-                        ("e2-medium", "1-2 vCPU (1 shared core), 4 GB memory")
-                    ],
-                    "Standard": [
-                        ("e2-standard-2", "2 vCPU (1 core), 8 GB memory"),
-                        ("e2-standard-4", "4 vCPU (2 cores), 16 GB memory"),
-                        ("e2-standard-8", "8 vCPU (4 cores), 32 GB memory"),
-                        ("e2-standard-16", "16 vCPU (8 cores), 64 GB memory"),
-                        ("e2-standard-32", "32 vCPU (16 cores), 128 GB memory")
-                    ],
-                    "High memory": [
-                        ("e2-highmem-2", "2 vCPU (1 core), 16 GB memory"),
-                        ("e2-highmem-4", "4 vCPU (2 cores), 32 GB memory"),
-                        ("e2-highmem-8", "8 vCPU (4 cores), 64 GB memory"),
-                        ("e2-highmem-16", "16 vCPU (8 cores), 128 GB memory")
-                    ],
-                    "High CPU": [
-                        ("e2-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
-                        ("e2-highcpu-4", "4 vCPU (2 cores), 4 GB memory"),
-                        ("e2-highcpu-8", "8 vCPU (4 cores), 8 GB memory"),
-                        ("e2-highcpu-16", "16 vCPU (8 cores), 16 GB memory"),
-                        ("e2-highcpu-32", "32 vCPU (16 cores), 32 GB memory")
-                    ]
-                },
-                "N2": {
-                    "Standard": [
-                        ("n2-standard-2", "2 vCPU (1 core), 8 GB memory"),
-                        ("n2-standard-4", "4 vCPU (2 core), 16 GB memory"),
-                        ("n2-standard-8", "8 vCPU (4 core), 32 GB memory"),
-                        ("n2-standard-16", "16 vCPU (8 core), 64 GB memory"),
-                        ("n2-standard-32", "32 vCPU (16 core), 128 GB memory"),
-                        ("n2-standard-48", "48 vCPU (24 core), 192 GB memory"),
-                        ("n2-standard-64", "64 vCPU (32 core), 256 GB memory"),
-                        ("n2-standard-80", "80 vCPU (40 core), 320 GB memory"),
-                        ("n2-standard-96", "96 vCPU (48 core), 384 GB memory"),
-                        ("n2-standard-128", "128 vCPU (64 core), 512 GB memory")
-                    ],
-                    "High memory": [
-                        ("n2-highmem-2", "2 vCPU (1 core), 16 GB memory"),
-                        ("n2-highmem-4", "4 vCPU (2 core), 32 GB memory"),
-                        ("n2-highmem-8", "8 vCPU (4 core), 64 GB memory"),
-                        ("n2-highmem-16", "16 vCPU (8 core), 128 GB memory"),
-                        ("n2-highmem-32", "32 vCPU (16 core), 256 GB memory"),
-                        ("n2-highmem-48", "48 vCPU (24 core), 384 GB memory"),
-                        ("n2-highmem-64", "64 vCPU (32 core), 512 GB memory"),
-                        ("n2-highmem-80", "80 vCPU (40 core), 640 GB memory"),
-                        ("n2-highmem-96", "96 vCPU (48 core), 768 GB memory"),
-                        ("n2-highmem-128", "128 vCPU (64 core), 864 GB memory")
-                    ],
-                    "High CPU": [
-                        ("n2-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
-                        ("n2-highcpu-4", "4 vCPU (2 core), 4 GB memory"),
-                        ("n2-highcpu-8", "8 vCPU (4 core), 8 GB memory"),
-                        ("n2-highcpu-16", "16 vCPU (8 core), 16 GB memory"),
-                        ("n2-highcpu-32", "32 vCPU (16 core), 32 GB memory"),
-                        ("n2-highcpu-48", "48 vCPU (24 core), 48 GB memory"),
-                        ("n2-highcpu-64", "64 vCPU (32 core), 64 GB memory"),
-                        ("n2-highcpu-80", "80 vCPU (40 core), 80 GB memory"),
-                        ("n2-highcpu-96", "96 vCPU (48 core), 96 GB memory")
-                    ]
-                },
-                "N2D": {
-                    "Standard": [
-                        ("n2d-standard-2", "2 vCPU (1 core), 8 GB memory"),
-                        ("n2d-standard-4", "4 vCPU (2 core), 16 GB memory"),
-                        ("n2d-standard-8", "8 vCPU (4 core), 32 GB memory"),
-                        ("n2d-standard-16", "16 vCPU (8 core), 64 GB memory"),
-                        ("n2d-standard-32", "32 vCPU (16 core), 128 GB memory"),
-                        ("n2d-standard-48", "48 vCPU (24 core), 192 GB memory"),
-                        ("n2d-standard-64", "64 vCPU (32 core), 256 GB memory"),
-                        ("n2d-standard-80", "80 vCPU (40 core), 320 GB memory"),
-                        ("n2d-standard-96", "96 vCPU (48 core), 384 GB memory"),
-                        ("n2d-standard-128", "128 vCPU (64 core), 512 GB memory"),
-                        ("n2d-standard-224", "224 vCPU (112 core), 896 GB memory")
-                    ],
-                    "High memory": [
-                        ("n2d-highmem-2", "2 vCPU (1 core), 16 GB memory"),
-                        ("n2d-highmem-4", "4 vCPU (2 core), 32 GB memory"),
-                        ("n2d-highmem-8", "8 vCPU (4 core), 64 GB memory"),
-                        ("n2d-highmem-16", "16 vCPU (8 core), 128 GB memory"),
-                        ("n2d-highmem-32", "32 vCPU (16 core), 256 GB memory"),
-                        ("n2d-highmem-48", "48 vCPU (24 core), 384 GB memory"),
-                        ("n2d-highmem-64", "64 vCPU (32 core), 512 GB memory"),
-                        ("n2d-highmem-80", "80 vCPU (40 core), 640 GB memory"),
-                        ("n2d-highmem-96", "96 vCPU (48 core), 768 GB memory")
-                    ],
-                    "High CPU": [
-                        ("n2d-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
-                        ("n2d-highcpu-4", "4 vCPU (2 core), 4 GB memory"),
-                        ("n2d-highcpu-8", "8 vCPU (4 core), 8 GB memory"),
-                        ("n2d-highcpu-16", "16 vCPU (8 core), 16 GB memory"),
-                        ("n2d-highcpu-32", "32 vCPU (16 core), 32 GB memory"),
-                        ("n2d-highcpu-48", "48 vCPU (24 core), 48 GB memory"),
-                        ("n2d-highcpu-64", "64 vCPU (32 core), 64 GB memory"),
-                        ("n2d-highcpu-80", "80 vCPU (40 core), 80 GB memory"),
-                        ("n2d-highcpu-96", "96 vCPU (48 core), 96 GB memory"),
-                        ("n2d-highcpu-128", "128 vCPU (64 core), 128 GB memory"),
-                        ("n2d-highcpu-224", "224 vCPU (112 core), 224 GB memory")
-                    ]
-                },
-                "T2A": {
-                    "Standard": [
-                        ("t2a-standard-1", "1 vCPU, 4 GB memory"),
-                        ("t2a-standard-2", "2 vCPU, 8 GB memory"),
-                        ("t2a-standard-4", "4 vCPU, 16 GB memory"),
-                        ("t2a-standard-8", "8 vCPU, 32 GB memory"),
-                        ("t2a-standard-16", "16 vCPU, 64 GB memory"),
-                        ("t2a-standard-32", "32 vCPU, 128 GB memory"),
-                        ("t2a-standard-48", "48 vCPU, 192 GB memory")
-                    ]
-                },
-                "T2D": {
-                    "Standard": [
-                        ("t2d-standard-1", "1 vCPU, 4 GB memory"),
-                        ("t2d-standard-2", "2 vCPU, 8 GB memory"),
-                        ("t2d-standard-4", "4 vCPU, 16 GB memory"),
-                        ("t2d-standard-8", "8 vCPU, 32 GB memory"),
-                        ("t2d-standard-16", "16 vCPU, 64 GB memory"),
-                        ("t2d-standard-32", "32 vCPU, 128 GB memory"),
-                        ("t2d-standard-48", "48 vCPU, 192 GB memory"),
-                        ("t2d-standard-60", "60 vCPU, 240 GB memory")
-                    ]
-                },
-                "N1": {
-                    "Shared-core": [
-                        ("f1-micro", "0.25-1 vCPU (1 shared core), 614 MB memory"),
-                        ("g1-small", "0.5-1 vCPU (1 shared core), 1.7 GB memory")
-                    ],
-                    "Standard": [
-                        ("n1-standard-1", "1 vCPU, 3.75 GB memory"),
-                        ("n1-standard-2", "2 vCPU (1 core), 7.5 GB memory"),
-                        ("n1-standard-4", "4 vCPU (2 core), 15 GB memory"),
-                        ("n1-standard-8", "8 vCPU (4 core), 30 GB memory"),
-                        ("n1-standard-16", "16 vCPU (8 core), 60 GB memory"),
-                        ("n1-standard-32", "32 vCPU (16 core), 120 GB memory"),
-                        ("n1-standard-64", "64 vCPU (32 core), 240 GB memory"),
-                        ("n1-standard-96", "96 vCPU (48 core), 360 GB memory")
-                    ],
-                    "High memory": [
-                        ("n1-highmem-2", "2 vCPU (1 core), 13 GB memory"),
-                        ("n1-highmem-4", "4 vCPU (2 core), 26 GB memory"),
-                        ("n1-highmem-8", "8 vCPU (4 core), 52 GB memory"),
-                        ("n1-highmem-16", "16 vCPU (8 core), 104 GB memory"),
-                        ("n1-highmem-32", "32 vCPU (16 core), 208 GB memory"),
-                        ("n1-highmem-64", "64 vCPU (32 core), 416 GB memory"),
-                        ("n1-highmem-96", "96 vCPU (48 core), 624 GB memory")
-                    ],
-                    "High CPU": [
-                        ("n1-highcpu-2", "2 vCPU (1 core), 1.8 GB memory"),
-                        ("n1-highcpu-4", "4 vCPU (2 core), 3.6 GB memory"),
-                        ("n1-highcpu-8", "8 vCPU (4 core), 7.2 GB memory"),
-                        ("n1-highcpu-16", "16 vCPU (8 core), 14.4 GB memory"),
-                        ("n1-highcpu-32", "32 vCPU (16 core), 28.8 GB memory"),
-                        ("n1-highcpu-64", "64 vCPU (32 core), 57.6 GB memory"),
-                        ("n1-highcpu-96", "96 vCPU (48 core), 86.4 GB memory")
-                    ]
-                }
-            }
-            return presets.get(series, {})
-
-        # ---- Machine type presets (General purpose) ----
-        def gp_series_catalog() -> Dict[str, Dict[str, Dict[str, list]]]:
-            """Return General purpose series with profiles and machine presets."""
-            return {
-                "C4": {
-                    "Standard": {
-                        "presets": [
-                            "c4-standard-2", "c4-standard-4", "c4-standard-8", "c4-standard-16", 
-                            "c4-standard-32", "c4-standard-64", "c4-standard-96", "c4-standard-128",
-                            "c4-standard-160", "c4-standard-192", "c4-standard-224", "c4-standard-256", "c4-standard-288"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "c4-highmem-2", "c4-highmem-4", "c4-highmem-8", "c4-highmem-16",
-                            "c4-highmem-32", "c4-highmem-64", "c4-highmem-96", "c4-highmem-128",
-                            "c4-highmem-160", "c4-highmem-192", "c4-highmem-224", "c4-highmem-256", "c4-highmem-288"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "c4-highcpu-2", "c4-highcpu-4", "c4-highcpu-8", "c4-highcpu-16",
-                            "c4-highcpu-32", "c4-highcpu-64", "c4-highcpu-96", "c4-highcpu-128",
-                            "c4-highcpu-160", "c4-highcpu-192", "c4-highcpu-224", "c4-highcpu-256", "c4-highcpu-288"
-                        ]
-                    }
-                },
-                "C4A": {
-                    "Standard": {
-                        "presets": [
-                            "c4a-standard-1", "c4a-standard-2", "c4a-standard-4", "c4a-standard-8",
-                            "c4a-standard-16", "c4a-standard-32", "c4a-standard-48", "c4a-standard-64", "c4a-standard-72"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "c4a-highmem-1", "c4a-highmem-2", "c4a-highmem-4", "c4a-highmem-8",
-                            "c4a-highmem-16", "c4a-highmem-32", "c4a-highmem-48", "c4a-highmem-64", "c4a-highmem-72"
-                        ]
-                    }
-                },
-                "C4D": {
-                    "Standard": {
-                        "presets": [
-                            "c4d-standard-2", "c4d-standard-4", "c4d-standard-8", "c4d-standard-16",
-                            "c4d-standard-32", "c4d-standard-64", "c4d-standard-96", "c4d-standard-128",
-                            "c4d-standard-160", "c4d-standard-192", "c4d-standard-224", "c4d-standard-256",
-                            "c4d-standard-288", "c4d-standard-320", "c4d-standard-352", "c4d-standard-384"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "c4d-highmem-2", "c4d-highmem-4", "c4d-highmem-8", "c4d-highmem-16",
-                            "c4d-highmem-32", "c4d-highmem-64", "c4d-highmem-96", "c4d-highmem-128",
-                            "c4d-highmem-160", "c4d-highmem-192", "c4d-highmem-224", "c4d-highmem-256",
-                            "c4d-highmem-288", "c4d-highmem-320", "c4d-highmem-352", "c4d-highmem-384"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "c4d-highcpu-2", "c4d-highcpu-4", "c4d-highcpu-8", "c4d-highcpu-16",
-                            "c4d-highcpu-32", "c4d-highcpu-64", "c4d-highcpu-96", "c4d-highcpu-128",
-                            "c4d-highcpu-160", "c4d-highcpu-192", "c4d-highcpu-224", "c4d-highcpu-256",
-                            "c4d-highcpu-288", "c4d-highcpu-320", "c4d-highcpu-352", "c4d-highcpu-384"
-                        ]
-                    }
-                },
-                "N4": {
-                    "Standard": {
-                        "presets": [
-                            "n4-standard-2", "n4-standard-4", "n4-standard-8", "n4-standard-16",
-                            "n4-standard-32", "n4-standard-64", "n4-standard-80"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "n4-highmem-2", "n4-highmem-4", "n4-highmem-8", "n4-highmem-16",
-                            "n4-highmem-32", "n4-highmem-64", "n4-highmem-80"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "n4-highcpu-2", "n4-highcpu-4", "n4-highcpu-8", "n4-highcpu-16",
-                            "n4-highcpu-32", "n4-highcpu-64", "n4-highcpu-80"
-                        ]
-                    }
-                },
-                "C3": {
-                    "Standard": {
-                        "presets": [
-                            "c3-standard-4", "c3-standard-8", "c3-standard-22", "c3-standard-44",
-                            "c3-standard-88", "c3-standard-176", "c3-standard-192"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "c3-highmem-4", "c3-highmem-8", "c3-highmem-22", "c3-highmem-44",
-                            "c3-highmem-88", "c3-highmem-176", "c3-highmem-192"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "c3-highcpu-4", "c3-highcpu-8", "c3-highcpu-22", "c3-highcpu-44",
-                            "c3-highcpu-88", "c3-highcpu-176", "c3-highcpu-192"
-                        ]
-                    }
-                },
-                "C3D": {
-                    "Standard": {
-                        "presets": [
-                            "c3d-standard-4","c3d-standard-8","c3d-standard-16","c3d-standard-30",
-                            "c3d-standard-60","c3d-standard-90","c3d-standard-180","c3d-standard-360",
-                            "c3d-standard-8-lssd","c3d-standard-16-lssd","c3d-standard-30-lssd",
-                            "c3d-standard-60-lssd","c3d-standard-90-lssd","c3d-standard-180-lssd","c3d-standard-360-lssd"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "c3d-highmem-4","c3d-highmem-8","c3d-highmem-16","c3d-highmem-30",
-                            "c3d-highmem-60","c3d-highmem-90","c3d-highmem-180","c3d-highmem-360",
-                            "c3d-highmem-8-lssd","c3d-highmem-16-lssd","c3d-highmem-30-lssd",
-                            "c3d-highmem-60-lssd","c3d-highmem-90-lssd","c3d-highmem-180-lssd","c3d-highmem-360-lssd"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "c3d-highcpu-4","c3d-highcpu-8","c3d-highcpu-16","c3d-highcpu-30",
-                            "c3d-highcpu-60","c3d-highcpu-90","c3d-highcpu-180","c3d-highcpu-360"
-                        ]
-                    }
-                },
-                "E2": {
-                    "Standard": {
-                        "presets": [
-                            "e2-micro", "e2-small", "e2-medium", "e2-standard-2", "e2-standard-4", 
-                            "e2-standard-8", "e2-standard-16", "e2-standard-32"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "e2-highmem-2", "e2-highmem-4", "e2-highmem-8", "e2-highmem-16"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "e2-highcpu-2", "e2-highcpu-4", "e2-highcpu-8", "e2-highcpu-16", "e2-highcpu-32"
-                        ]
-                    }
-                },
-                "N2": {
-                    "Standard": {
-                        "presets": [
-                            "n2-standard-2", "n2-standard-4", "n2-standard-8", "n2-standard-16", 
-                            "n2-standard-32", "n2-standard-48", "n2-standard-64", "n2-standard-80", 
-                            "n2-standard-96", "n2-standard-128"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "n2-highmem-2", "n2-highmem-4", "n2-highmem-8", "n2-highmem-16",
-                            "n2-highmem-32", "n2-highmem-48", "n2-highmem-64", "n2-highmem-80", "n2-highmem-96", "n2-highmem-128"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "n2-highcpu-2", "n2-highcpu-4", "n2-highcpu-8", "n2-highcpu-16",
-                            "n2-highcpu-32", "n2-highcpu-48", "n2-highcpu-64", "n2-highcpu-80", "n2-highcpu-96", "n2-highcpu-128"
-                        ]
-                    }
-                },
-                "N2D": {
-                    "Standard": {
-                        "presets": [
-                            "n2d-standard-2", "n2d-standard-4", "n2d-standard-8", "n2d-standard-16", 
-                            "n2d-standard-32", "n2d-standard-48", "n2d-standard-64", "n2d-standard-80", 
-                            "n2d-standard-96", "n2d-standard-128", "n2d-standard-224"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "n2d-highmem-2", "n2d-highmem-4", "n2d-highmem-8", "n2d-highmem-16",
-                            "n2d-highmem-32", "n2d-highmem-48", "n2d-highmem-64", "n2d-highmem-80", "n2d-highmem-96", "n2d-highmem-128", "n2d-highmem-224"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "n2d-highcpu-2", "n2d-highcpu-4", "n2d-highcpu-8", "n2d-highcpu-16",
-                            "n2d-highcpu-32", "n2d-highcpu-48", "n2d-highcpu-64", "n2d-highcpu-80", "n2d-highcpu-96", "n2d-highcpu-128", "n2d-highcpu-224"
-                        ]
-                    }
-                },
-                "T2A": {
-                    "Standard": {
-                        "presets": [
-                            "t2a-standard-1", "t2a-standard-2", "t2a-standard-4", "t2a-standard-8",
-                            "t2a-standard-16", "t2a-standard-32", "t2a-standard-48"
-                        ]
-                    }
-                },
-                "T2D": {
-                    "Standard": {
-                        "presets": [
-                            "t2d-standard-1", "t2d-standard-2", "t2d-standard-4", "t2d-standard-8",
-                            "t2d-standard-16", "t2d-standard-32", "t2d-standard-48", "t2d-standard-60"
-                        ]
-                    }
-                },
-                "N1": {
-                    "Standard": {
-                        "presets": [
-                            "n1-standard-1", "n1-standard-2", "n1-standard-4", "n1-standard-8", 
-                            "n1-standard-16", "n1-standard-32", "n1-standard-64", "n1-standard-96"
-                        ]
-                    },
-                    "High memory": {
-                        "presets": [
-                            "n1-highmem-2", "n1-highmem-4", "n1-highmem-8", "n1-highmem-16",
-                            "n1-highmem-32", "n1-highmem-64", "n1-highmem-96"
-                        ]
-                    },
-                    "High CPU": {
-                        "presets": [
-                            "n1-highcpu-2", "n1-highcpu-4", "n1-highcpu-8", "n1-highcpu-16",
-                            "n1-highcpu-32", "n1-highcpu-64", "n1-highcpu-96"
-                        ]
-                    }
-                }
-            }
-
-        # Display existing instances with inline editing and advanced options
-        if st.session_state.compute_instances:
-            st.markdown("**Current Compute Instances:**")
-            for i, vm in enumerate(list(st.session_state.compute_instances)):
-                # Region/Zone helpers
-                regions = ["us-central1", "us-west1", "europe-west1", "asia-south1"]
-                region_to_zones = {
-                    "us-central1": ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"],
-                    "us-west1": ["us-west1-a", "us-west1-b", "us-west1-c"],
-                    "europe-west1": ["europe-west1-b", "europe-west1-c", "europe-west1-d"],
-                    "asia-south1": ["asia-south1-a", "asia-south1-b", "asia-south1-c"],
-                }
-
-                col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
-                with col1:
-                    new_name = st.text_input("Name", value=vm.get('name', ''), key=f"vm_name_{i}")
-                with col2:
-                    # Region selection; default inferred from zone prefix
-                    current_zone = vm.get('zone', 'us-central1-a')
-                    inferred_region = vm.get('region') or current_zone.rsplit('-', 1)[0]
-                    r_val = inferred_region if inferred_region in regions else regions[0]
-                    r_idx = regions.index(r_val)
-                    new_region = st.selectbox("Region", regions, index=r_idx, key=f"vm_region_{i}")
                 with col3:
-                    # Zone options based on region
-                    zones_list = region_to_zones.get(new_region, region_to_zones[regions[0]])
-                    z_val = current_zone if current_zone in zones_list else zones_list[0]
-                    z_idx = zones_list.index(z_val)
-                    new_zone = st.selectbox("Zone", zones_list, index=z_idx, key=f"vm_zone_{i}")
+                    form_cidr = st.text_input("CIDR Range", value=subnet.get('ip_cidr_range', ''), key=f"subnet_cidr_{i}")
                 with col4:
-                    # Machine type selection lives in Advanced VM Options below
-                    new_type = vm.get('machine_type', '')
-                    st.markdown(f"**Machine type**: `{new_type or 'not set'}`")
-                    if st.button("Change machine type", key=f"vm_change_type_{i}"):
-                        st.session_state[f"open_vm_adv_{i}"] = True
-                        # Don't rerun here - let the UI update naturally
-                with col5:
-                    if st.button("🗑️", key=f"del_vm_{i}"):
-                        st.session_state.compute_instances.pop(i)
+                    if st.button("🗑️", key=f"del_subnet_{i}"):
+                        st.session_state.subnets.pop(i)
+                        st.session_state.subnet_form_count -= 1
                         st.rerun()
 
-                with st.expander("🔧 Advanced VM Options", expanded=st.session_state.get(f"open_vm_adv_{i}", False)):
-                    # Inline Machine Type Selection (fallback if popup not used)
-                    st.markdown("**Machine Type Selection**")
-                    tabs = st.tabs(["General purpose", "Compute optimized", "Memory optimized", "Storage optimized", "GPUs"])
-                    with tabs[0]:
+                st.markdown("**Attach to VPC**")
+                if vpc_options:
+                    try:
+                        default_vpc_idx = vpc_options.index(subnet.get('network', vpc_options[0]))
+                    except ValueError:
+                        default_vpc_idx = 0
+                    form_network = st.selectbox("VPC Network", vpc_options, index=default_vpc_idx, key=f"subnet_network_{i}")
+                else:
+                    form_network = st.text_input("VPC Network Name", value=subnet.get('network', ''), placeholder="enter existing VPC name", key=f"subnet_network_text_{i}")
+
+                # Basic subnet options
+                col1, col2 = st.columns(2)
+                with col1:
+                    form_private_ip_google_access = st.checkbox("Private Google Access", value=subnet.get('private_ip_google_access', True), key=f"subnet_private_ip_{i}")
+                with col2:
+                    form_purpose = st.selectbox("Purpose", ["PRIVATE", "REGIONAL_MANAGED_PROXY", "GLOBAL_MANAGED_PROXY", "PRIVATE_SERVICE_CONNECT", "PEER_MIGRATION", "PRIVATE_NAT"], index=0, key=f"subnet_purpose_{i}")
+
+                # Advanced subnet options (collapsible)
+                with st.expander("🔧 Advanced Subnet Options", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_description = st.text_input(
+                            "Description", 
+                            value=subnet.get('description', ''),
+                            key=f"subnet_description_{i}"
+                        )
+                        form_reserved_internal_range = st.text_input(
+                            "Reserved Internal Range", 
+                            value=subnet.get('reserved_internal_range', ''),
+                            placeholder="networkconnectivity.googleapis.com/projects/PROJECT/locations/global/internalRanges/RANGE",
+                            key=f"subnet_reserved_range_{i}"
+                        )
+                        form_role = st.selectbox(
+                            "Role (for REGIONAL_MANAGED_PROXY)",
+                            ["ACTIVE", "BACKUP"],
+                            index=0 if subnet.get('role', 'ACTIVE') == 'ACTIVE' else 1,
+                            key=f"subnet_role_{i}"
+                        )
+                    with col2:
+                        form_private_ipv6_google_access = st.text_input(
+                            "Private IPv6 Google Access", 
+                            value=subnet.get('private_ipv6_google_access', ''),
+                            key=f"subnet_private_ipv6_{i}"
+                        )
+                        form_external_ipv6_prefix = st.text_input(
+                            "External IPv6 Prefix", 
+                            value=subnet.get('external_ipv6_prefix', ''),
+                            key=f"subnet_external_ipv6_{i}"
+                        )
+                        form_ip_collection = st.text_input(
+                            "IP Collection (PublicDelegatedPrefix)", 
+                            value=subnet.get('ip_collection', ''),
+                            placeholder="projects/PROJECT/regions/REGION/publicDelegatedPrefixes/PREFIX",
+                            key=f"subnet_ip_collection_{i}"
+                        )
+
+                    # IPv6 Configuration
+                    st.markdown("**IPv6 Configuration:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_stack_type = st.selectbox(
+                            "Stack Type",
+                            ["IPV4_ONLY", "IPV4_IPV6", "IPV6_ONLY"],
+                            index=0 if subnet.get('stack_type', 'IPV4_ONLY') == 'IPV4_ONLY' else (1 if subnet.get('stack_type') == 'IPV4_IPV6' else 2),
+                            key=f"subnet_stack_type_{i}"
+                        )
+                    with col2:
+                        form_ipv6_access_type = st.selectbox(
+                            "IPv6 Access Type",
+                            ["EXTERNAL", "INTERNAL"],
+                            index=0 if subnet.get('ipv6_access_type', 'EXTERNAL') == 'EXTERNAL' else 1,
+                            key=f"subnet_ipv6_access_{i}"
+                        )
+
+                    # Advanced Configuration
+                    st.markdown("**Advanced Configuration:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_allow_cidr_overlap = st.checkbox(
+                            "Allow Subnet CIDR Routes Overlap", 
+                            value=subnet.get('allow_subnet_cidr_routes_overlap', False),
+                            key=f"subnet_allow_overlap_{i}"
+                        )
+                    with col2:
+                        form_send_secondary_empty = st.checkbox(
+                            "Send Secondary IP Range If Empty", 
+                            value=subnet.get('send_secondary_ip_range_if_empty', False),
+                            key=f"subnet_send_secondary_{i}"
+                        )
+
+                    # Logging Configuration
+                    st.markdown("**Logging Configuration:**")
+                    form_enable_logging = st.checkbox(
+                        "Enable VPC Flow Logging", 
+                        value=subnet.get('log_config') is not None,
+                        key=f"subnet_enable_logging_{i}"
+                    )
+                    
+                    if form_enable_logging:
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            form_log_aggregation = st.selectbox(
+                                "Aggregation Interval",
+                                ["INTERVAL_5_SEC", "INTERVAL_30_SEC", "INTERVAL_1_MIN", "INTERVAL_5_MIN", "INTERVAL_10_MIN", "INTERVAL_15_MIN"],
+                                index=0,
+                                key=f"subnet_log_aggregation_{i}"
+                            )
+                        with col2:
+                            form_log_sampling = st.number_input(
+                                "Flow Sampling (0.0-1.0)", 
+                                value=0.5, 
+                                min_value=0.0, 
+                                max_value=1.0, 
+                                step=0.1,
+                                key=f"subnet_log_sampling_{i}"
+                            )
+                        with col3:
+                            form_log_metadata = st.selectbox(
+                                "Log Metadata",
+                                ["INCLUDE_ALL_METADATA", "EXCLUDE_ALL_METADATA", "CUSTOM_METADATA"],
+                                index=0,
+                                key=f"subnet_log_metadata_{i}"
+                            )
+
+                    # Resource Manager Tags
+                    st.markdown("**Resource Manager Tags:**")
+                    form_resource_tags = st.text_input(
+                        "Resource Manager Tags (JSON format)", 
+                        value=json.dumps(subnet.get('resource_manager_tags', {}), indent=2),
+                        placeholder='{"tagKeys/123": "tagValues/456"}',
+                        key=f"subnet_resource_tags_{i}"
+                    )
+
+                # Parse resource manager tags
+                try:
+                    resource_tags = json.loads(form_resource_tags) if form_resource_tags and form_resource_tags.strip() else {}
+                except json.JSONDecodeError:
+                    resource_tags = {}
+
+                # Build log config if logging is enabled
+                log_config = None
+                if form_enable_logging:
+                    log_config = {
+                        "aggregation_interval": form_log_aggregation,
+                        "flow_sampling": form_log_sampling,
+                        "metadata": form_log_metadata
+                    }
+
+                # Update subnet data
+                subnet_data = {
+                    "name": form_name,
+                    "region": form_region,
+                    "ip_cidr_range": form_cidr,
+                    "network": form_network,
+                    "private_ip_google_access": form_private_ip_google_access,
+                    "purpose": form_purpose,
+                    "description": form_description if form_description and form_description.strip() else None,
+                    "reserved_internal_range": form_reserved_internal_range if form_reserved_internal_range and form_reserved_internal_range.strip() else None,
+                    "role": form_role if form_purpose == "REGIONAL_MANAGED_PROXY" else None,
+                    "private_ipv6_google_access": form_private_ipv6_google_access if form_private_ipv6_google_access and form_private_ipv6_google_access.strip() else None,
+                    "stack_type": form_stack_type,
+                    "ipv6_access_type": form_ipv6_access_type if form_stack_type != "IPV4_ONLY" else None,
+                    "external_ipv6_prefix": form_external_ipv6_prefix if form_external_ipv6_prefix and form_external_ipv6_prefix.strip() else None,
+                    "ip_collection": form_ip_collection if form_ip_collection and form_ip_collection.strip() else None,
+                    "allow_subnet_cidr_routes_overlap": form_allow_cidr_overlap,
+                    "send_secondary_ip_range_if_empty": form_send_secondary_empty,
+                    "resource_manager_tags": resource_tags,
+                    "log_config": log_config
+                }
+
+                st.session_state.subnets[i] = subnet_data
+
+            if st.button("➕ Add Another Subnet", key="add_subnet_section"):
+                st.session_state.subnet_form_count += 1
+                st.rerun()
+
+        # Always add Subnets to resources if they exist (regardless of checkbox)
+        if st.session_state.get("subnets"):
+            resources["subnets"] = st.session_state.subnets
+
+        # Firewall Rules
+        if st.checkbox("🔥 Create Firewall Rules"):
+            if 'firewall_rules' not in st.session_state:
+                st.session_state.firewall_rules = []
+            if 'firewall_form_count' not in st.session_state:
+                st.session_state.firewall_form_count = 1
+
+            # Display existing Firewall Rules in a collapsible section
+            if st.session_state.get("firewall_rules"):
+                with st.expander(f"📋 Current Firewall Rules ({len(st.session_state.firewall_rules)})", expanded=False):
+                    for idx, rule in enumerate(st.session_state.firewall_rules):
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                        with col1:
+                            st.text(f"**{rule.get('name', 'unnamed')}**")
+                        with col2:
+                            st.text(f"Direction: {rule.get('direction', 'INGRESS')}")
+                        with col3:
+                            st.text(f"Protocol: {rule.get('protocol', 'tcp')}")
+                        with col4:
+                            if st.button("🗑️", key=f"del_firewall_list_{idx}"):
+                                st.session_state.firewall_rules.pop(idx)
+                                if st.session_state.firewall_form_count > 1:
+                                    st.session_state.firewall_form_count -= 1
+                                st.rerun()
+                        if idx < len(st.session_state.firewall_rules) - 1:
+                            st.markdown("---")
+
+            st.markdown("**Configure Firewall Rule:**")
+            for i in range(st.session_state.firewall_form_count):
+                if i > 0:
+                    st.markdown("---")
+
+                # Ensure data object exists
+                if i >= len(st.session_state.firewall_rules):
+                    st.session_state.firewall_rules.append({
+                        "name": f"firewall-rule-{i+1}",
+                        "network": "my-vpc",
+                        "direction": "INGRESS",
+                        "protocol": "tcp",
+                        "source_ranges": ["0.0.0.0/0"],
+                        "source_tags": [],
+                        "source_service_accounts": [],
+                        "target_tags": [],
+                        "target_service_accounts": [],
+                        "destination_ranges": [],
+                        "allows": [{"protocol": "tcp", "ports": ["22"]}],
+                        "priority": 1000,
+                        "disabled": False,
+                        "description": "",
+                        "enable_logging": False,
+                        "log_config": None
+                    })
+
+                rule = st.session_state.firewall_rules[i]
+
+                st.markdown(f"**Firewall Rule {i+1}:**")
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+                with col1:
+                    form_name = st.text_input("Rule Name", value=rule.get('name', ''), key=f"fw_name_{i}")
+                with col2:
+                    form_direction = st.selectbox(
+                        "Direction", ["INGRESS", "EGRESS"],
+                        index=0 if rule.get('direction', 'INGRESS') == 'INGRESS' else 1,
+                        key=f"fw_direction_{i}"
+                    )
+                with col3:
+                    form_protocol = st.selectbox(
+                        "Protocol", ["tcp", "udp", "icmp", "all"],
+                        index=["tcp", "udp", "icmp", "all"].index(rule.get('protocol', 'tcp')),
+                        key=f"fw_protocol_{i}"
+                    )
+                with col4:
+                    if st.button("🗑️", key=f"del_firewall_{i}"):
+                        st.session_state.firewall_rules.pop(i)
+                        st.session_state.firewall_form_count -= 1
+                        st.rerun()
+
+                # Additional fields
+                col1, col2 = st.columns(2)
+                with col1:
+                    # Determine available VPC names (only from currently enabled VPC section)
+                    vpc_options = []
+                    if resources.get("vpc") and resources["vpc"].get("name"):
+                        vpc_options.append(resources["vpc"]["name"])
+                    if isinstance(resources.get("vpcs"), list):
+                        for v in resources["vpcs"]:
+                            if isinstance(v, dict) and v.get("name"):
+                                vpc_options.append(v["name"])
+                    # Removed fallback to session_state.vpcs - only show VPCs when VPC section is enabled
+
+                    if vpc_options:
+                        try:
+                            default_vpc_idx = vpc_options.index(rule.get('network', vpc_options[0]))
+                        except ValueError:
+                            default_vpc_idx = 0
+                        form_network = st.selectbox("Network", vpc_options, index=default_vpc_idx, key=f"fw_network_{i}")
+                    else:
+                        form_network = st.text_input("Network", value=rule.get('network', 'my-vpc'), key=f"fw_network_text_{i}")
+                with col2:
+                    form_source_ranges = st.text_input("Source Ranges (comma-separated)", 
+                                                     value=", ".join(rule.get('source_ranges', ['0.0.0.0/0'])), 
+                                                     key=f"fw_source_ranges_{i}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    form_ports = st.text_input("Ports (comma-separated)", value="22", key=f"fw_ports_{i}")
+                with col2:
+                    form_priority = st.number_input("Priority", value=rule.get('priority', 1000), min_value=0, max_value=65535, key=f"fw_priority_{i}")
+
+                # Advanced fields (collapsible)
+                with st.expander("🔧 Advanced Options", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_source_tags = st.text_input("Source Tags (comma-separated)", 
+                                                       value=", ".join(rule.get('source_tags', [])), 
+                                                       key=f"fw_source_tags_{i}")
+                        form_source_service_accounts = st.text_input("Source Service Accounts (comma-separated)", 
+                                                                   value=", ".join(rule.get('source_service_accounts', [])), 
+                                                                   key=f"fw_source_service_accounts_{i}")
+                    with col2:
+                        form_target_tags = st.text_input("Target Tags (comma-separated)", 
+                                                       value=", ".join(rule.get('target_tags', [])), 
+                                                       key=f"fw_target_tags_{i}")
+                        form_target_service_accounts = st.text_input("Target Service Accounts (comma-separated)", 
+                                                                   value=", ".join(rule.get('target_service_accounts', [])), 
+                                                                   key=f"fw_target_service_accounts_{i}")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_destination_ranges = st.text_input("Destination Ranges (comma-separated)", 
+                                                              value=", ".join(rule.get('destination_ranges', [])), 
+                                                              key=f"fw_destination_ranges_{i}")
+                    with col2:
+                        form_disabled = st.checkbox("Disabled", value=rule.get('disabled', False), key=f"fw_disabled_{i}")
+
+                    # Description
+                    form_description = st.text_input("Description", value=rule.get('description', ''), key=f"fw_description_{i}")
+
+                    # Logging configuration
+                    st.markdown("**Logging:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_enable_logging = st.checkbox("Enable Logging", value=rule.get('enable_logging', False), key=f"fw_enable_logging_{i}")
+                    with col2:
+                        if form_enable_logging:
+                            form_log_metadata = st.selectbox("Log Metadata", 
+                                                           ["EXCLUDE_ALL_METADATA", "INCLUDE_ALL_METADATA"],
+                                                           index=0 if rule.get('log_metadata', 'EXCLUDE_ALL_METADATA') == 'EXCLUDE_ALL_METADATA' else 1,
+                                                           key=f"fw_log_metadata_{i}")
+                        else:
+                            form_log_metadata = "EXCLUDE_ALL_METADATA"
+
+                # Parse comma-separated values
+                source_ranges = [s.strip() for s in form_source_ranges.split(',') if s.strip()]
+                ports = [p.strip() for p in form_ports.split(',') if p.strip()]
+                source_tags = [s.strip() for s in form_source_tags.split(',') if s.strip()]
+                source_service_accounts = [s.strip() for s in form_source_service_accounts.split(',') if s.strip()]
+                target_tags = [s.strip() for s in form_target_tags.split(',') if s.strip()]
+                target_service_accounts = [s.strip() for s in form_target_service_accounts.split(',') if s.strip()]
+                destination_ranges = [s.strip() for s in form_destination_ranges.split(',') if s.strip()]
+                
+                # Build allows array
+                allows = [{"protocol": form_protocol, "ports": ports}] if ports else [{"protocol": form_protocol}]
+                
+                # Build log_config if logging is enabled
+                log_config = None
+                if form_enable_logging:
+                    log_config = {"metadata": form_log_metadata}
+                
+                # Update rule
+                st.session_state.firewall_rules[i] = {
+                    "name": form_name,
+                    "network": form_network,
+                    "direction": form_direction,
+                    "protocol": form_protocol,
+                    "source_ranges": source_ranges,
+                    "source_tags": source_tags,
+                    "source_service_accounts": source_service_accounts,
+                    "target_tags": target_tags,
+                    "target_service_accounts": target_service_accounts,
+                    "destination_ranges": destination_ranges,
+                    "allows": allows,
+                    "priority": form_priority,
+                    "disabled": form_disabled,
+                    "description": form_description,
+                    "enable_logging": form_enable_logging,
+                    "log_config": log_config
+                }
+
+            if st.button("➕ Add Another Firewall Rule", key="add_firewall_section"):
+                st.session_state.firewall_form_count += 1
+                st.rerun()
+
+        # Always add Firewall Rules to resources if they exist (regardless of checkbox)
+        if st.session_state.get("firewall_rules"):
+            resources["firewall_rules"] = st.session_state.firewall_rules
+
+    # TAB 2: COMPUTE RESOURCES
+    with tab2:
+        st.markdown("### 💻 Compute Resources")
+        st.markdown("Configure virtual machines, Kubernetes clusters, and persistent storage")
+        st.markdown("---")
+
+
+        # Compute Disks
+        if st.checkbox("💾 Create Compute Disks"):
+            st.markdown("**Compute Disk Configuration**")
+            if 'disks' not in st.session_state:
+                st.session_state.disks = []
+        
+            # Display existing disks
+            if st.session_state.get("disks"):
+                st.markdown("**Current Compute Disks:**")
+                for i, disk in enumerate(st.session_state.disks):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        st.text(f"Name: {disk['name']}")
+                    with col2:
+                        st.text(f"Size: {disk['size_gb']}GB")
+                    with col3:
+                        if st.button("🗑️", key=f"del_disk_{i}"):
+                            st.session_state.disks.pop(i)
+                            st.rerun()
+        
+            # Add new disk
+            st.markdown("**Add New Compute Disk:**")
+            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+            with col1:
+                disk_name = st.text_input("Disk Name", value="my-disk", key="new_disk_name")
+            with col2:
+                disk_zone = st.selectbox("Zone", ["us-central1-a", "us-west1-a", "europe-west1-a"], key="new_disk_zone")
+            with col3:
+                disk_size = st.number_input("Size (GB)", min_value=1, max_value=1000, value=10, key="new_disk_size")
+            with col4:
+                if st.button("➕ Add", key="add_disk"):
+                    if disk_name:
+                        new_disk = {
+                            "name": disk_name,
+                            "zone": disk_zone,
+                            "size_gb": disk_size,
+                            "type": "pd-standard"
+                        }
+                        st.session_state.disks.append(new_disk)
+                        st.rerun()
+
+        # Always add Disks to resources if they exist (regardless of checkbox)
+        if st.session_state.get("disks"):
+            resources["disks"] = st.session_state.disks
+
+        # GKE Cluster
+        if st.checkbox("☸️ Create GKE Cluster"):
+            st.markdown("**GKE Configuration**")
+            if 'gke_clusters' not in st.session_state:
+                st.session_state.gke_clusters = []
+
+            gke_name = st.text_input("Cluster Name", value="my-gke", key="gke_name")
+            gke_location = st.selectbox("Location", ["us-central1", "us-west1", "europe-west1"], key="gke_location")
+            gke_machine_type = st.selectbox("Node Machine Type", ["e2-standard-2", "e2-standard-4", "e2-standard-8"], key="gke_machine_type")
+            gke_node_count = st.number_input("Node Count", min_value=1, max_value=10, value=1, key="gke_node_count")
+
+            if gke_name:
+                gke_config = {
+                    "name": gke_name,
+                    "location": gke_location,
+                    "node_pool_name": "default-pool",
+                    "node_count": gke_node_count,
+                    "machine_type": gke_machine_type
+                }
+                # Store in session state
+                if not st.session_state.gke_clusters or st.session_state.gke_clusters[0].get('name') != gke_name:
+                    st.session_state.gke_clusters = [gke_config]
+
+        # Always add GKE Clusters to resources if they exist (regardless of checkbox)
+        if st.session_state.get("gke_clusters"):
+            resources["gke_clusters"] = st.session_state.gke_clusters
+
+        # Compute Instances
+        if st.checkbox("💻 Create Compute Instances"):
+            st.markdown("**VM Configuration**")
+            if 'compute_instances' not in st.session_state:
+                st.session_state.compute_instances = []
+
+            # ---- Pricing helpers (approximate) ----
+            def infer_vcpu_and_memory(machine_type: str) -> tuple[float, float]:
+                mt = (machine_type or "").lower()
+                # Known presets
+                presets = {
+                    "e2-micro": (0.25, 1),
+                    "e2-small": (0.5, 2),
+                    "e2-medium": (2, 4),
+                    "e2-standard-2": (2, 8),
+                    "e2-standard-4": (4, 16),
+                    "n2-standard-2": (2, 8),
+                    "n2-standard-4": (4, 16),
+                }
+                if mt in presets:
+                    return presets[mt]
+                # Heuristic: standard-N => vcpu=N, mem=4GB per vCPU
+                import re
+                m = re.search(r"-(\d+)$", mt)
+                if m:
+                    vcpu = float(m.group(1))
+                    mem = vcpu * 4.0
+                    return (vcpu, mem)
+                # Fallback
+                return (2.0, 8.0)
+
+            def estimate_vm_cost_monthly(vm: dict) -> dict:
+                # Approximate hourly pricing model (us-central1):
+                # hourly_compute = vcpu*0.03 + mem_gb*0.005
+                vcpu, mem_gb = infer_vcpu_and_memory(vm.get('machine_type', 'e2-standard-2'))
+                hourly_compute = vcpu * 0.03 + mem_gb * 0.005
+                # Disk pricing (balanced): $0.10 per GB-month; SSD: $0.17; standard: $0.04
+                size_gb = (vm.get('boot_disk_size_gb') or 10)
+                dtype = (vm.get('boot_disk_type') or 'pd-balanced').lower()
+                per_gb_month = 0.10 if 'balanced' in dtype else (0.17 if 'ssd' in dtype else 0.04)
+                disk_month = size_gb * per_gb_month
+                monthly_compute = hourly_compute * 730.0
+                total = monthly_compute + disk_month
+                return {
+                    "vcpu": vcpu,
+                    "mem_gb": mem_gb,
+                    "hourly_compute": hourly_compute,
+                    "monthly_compute": monthly_compute,
+                    "disk_month": disk_month,
+                    "total": total,
+                }
+
+            # ---- Machine series specifications ----
+            def get_machine_series_data() -> list:
+                """Return machine series data for table display"""
+                return [
+                    {"Series": "C4", "Description": "Consistently high performance", "vCPUs": "2 - 288", "Memory": "4 - 2,232 GB", "CPU Platform": "Intel Emerald Rapids"},
+                    {"Series": "C4A", "Description": "Arm-based consistently high performance", "vCPUs": "1 - 72", "Memory": "2 - 576 GB", "CPU Platform": "Google Axion"},
+                    {"Series": "C4D", "Description": "Consistently high performance", "vCPUs": "2 - 384", "Memory": "3 - 3,072 GB", "CPU Platform": "AMD Turin"},
+                    {"Series": "N4", "Description": "Flexible & cost-optimized", "vCPUs": "2 - 80", "Memory": "4 - 640 GB", "CPU Platform": "Intel Emerald Rapids"},
+                    {"Series": "C3", "Description": "Consistently high performance", "vCPUs": "4 - 192", "Memory": "8 - 1,536 GB", "CPU Platform": "Intel Sapphire Rapids"},
+                    {"Series": "C3D", "Description": "Consistently high performance", "vCPUs": "4 - 360", "Memory": "8 - 2,880 GB", "CPU Platform": "AMD Genoa"},
+                    {"Series": "E2", "Description": "Low cost, day-to-day computing", "vCPUs": "0.25 - 32", "Memory": "1 - 128 GB", "CPU Platform": "Intel Broadwell"},
+                    {"Series": "N2", "Description": "Balanced price & performance", "vCPUs": "2 - 128", "Memory": "2 - 864 GB", "CPU Platform": "Intel Cascade Lake"},
+                    {"Series": "N2D", "Description": "Balanced price & performance", "vCPUs": "2 - 224", "Memory": "2 - 896 GB", "CPU Platform": "AMD Milan"},
+                    {"Series": "T2A", "Description": "Scale-out workloads", "vCPUs": "1 - 48", "Memory": "4 - 192 GB", "CPU Platform": "Ampere Altra"},
+                    {"Series": "T2D", "Description": "Scale-out workloads", "vCPUs": "1 - 60", "Memory": "4 - 240 GB", "CPU Platform": "AMD Milan"},
+                    {"Series": "N1", "Description": "Balanced price & performance", "vCPUs": "0.25 - 96", "Memory": "0.6 - 624 GB", "CPU Platform": "Intel Haswell"}
+                ]
+        
+            def get_series_presets(series: str) -> Dict[str, list]:
+                """Get presets for a specific series"""
+                presets = {
+                    "C4": {
+                        "Standard": [
+                            ("c4-standard-2", "2 vCPU (1 core), 7 GB memory"),
+                            ("c4-standard-4", "4 vCPU (2 core), 15 GB memory"),
+                            ("c4-standard-8", "8 vCPU (4 core), 30 GB memory"),
+                            ("c4-standard-16", "16 vCPU (8 core), 60 GB memory"),
+                            ("c4-standard-24", "24 vCPU (12 core), 90 GB memory"),
+                            ("c4-standard-32", "32 vCPU (16 core), 120 GB memory"),
+                            ("c4-standard-48", "48 vCPU (24 core), 180 GB memory"),
+                            ("c4-standard-96", "96 vCPU (48 core), 360 GB memory"),
+                            ("c4-standard-144", "144 vCPU (72 core), 540 GB memory"),
+                            ("c4-standard-192", "192 vCPU (96 core), 720 GB memory"),
+                            ("c4-standard-288", "288 vCPU (144 core), 1,080 GB memory"),
+                            ("c4-standard-288-metal", "288 vCPU, 1,080 GB memory")
+                        ],
+                        "Standard with local SSD": [
+                            ("c4-standard-4-lssd", "4 vCPU (2 core), 15 GB memory, 1 Local SSD disks"),
+                            ("c4-standard-8-lssd", "8 vCPU (4 core), 30 GB memory, 1 Local SSD disks"),
+                            ("c4-standard-16-lssd", "16 vCPU (8 core), 60 GB memory, 2 Local SSD disks"),
+                            ("c4-standard-24-lssd", "24 vCPU (12 core), 90 GB memory, 4 Local SSD disks"),
+                            ("c4-standard-32-lssd", "32 vCPU (16 core), 120 GB memory, 5 Local SSD disks"),
+                            ("c4-standard-48-lssd", "48 vCPU (24 core), 180 GB memory, 8 Local SSD disks"),
+                            ("c4-standard-96-lssd", "96 vCPU (48 core), 360 GB memory, 16 Local SSD disks"),
+                            ("c4-standard-144-lssd", "144 vCPU (72 core), 540 GB memory, 24 Local SSD disks"),
+                            ("c4-standard-192-lssd", "192 vCPU (96 core), 720 GB memory, 32 Local SSD disks"),
+                            ("c4-standard-288-lssd", "288 vCPU (144 core), 1,080 GB memory, 48 Local SSD disks")
+                        ],
+                        "High memory": [
+                            ("c4-highmem-2", "2 vCPU (1 core), 15 GB memory"),
+                            ("c4-highmem-4", "4 vCPU (2 core), 31 GB memory"),
+                            ("c4-highmem-8", "8 vCPU (4 core), 62 GB memory"),
+                            ("c4-highmem-16", "16 vCPU (8 core), 124 GB memory"),
+                            ("c4-highmem-24", "24 vCPU (12 core), 186 GB memory"),
+                            ("c4-highmem-32", "32 vCPU (16 core), 248 GB memory"),
+                            ("c4-highmem-48", "48 vCPU (24 core), 372 GB memory"),
+                            ("c4-highmem-96", "96 vCPU (48 core), 744 GB memory"),
+                            ("c4-highmem-144", "144 vCPU (72 core), 1,116 GB memory"),
+                            ("c4-highmem-192", "192 vCPU (96 core), 1,488 GB memory"),
+                            ("c4-highmem-288", "288 vCPU (144 core), 2,232 GB memory"),
+                            ("c4-highmem-288-metal", "288 vCPU, 2,232 GB memory")
+                        ],
+                        "High memory with local SSD": [
+                            ("c4-highmem-4-lssd", "4 vCPU (2 core), 31 GB memory, 1 Local SSD disks"),
+                            ("c4-highmem-8-lssd", "8 vCPU (4 core), 62 GB memory, 1 Local SSD disks"),
+                            ("c4-highmem-16-lssd", "16 vCPU (8 core), 124 GB memory, 2 Local SSD disks"),
+                            ("c4-highmem-24-lssd", "24 vCPU (12 core), 186 GB memory, 4 Local SSD disks"),
+                            ("c4-highmem-32-lssd", "32 vCPU (16 core), 248 GB memory, 5 Local SSD disks"),
+                            ("c4-highmem-48-lssd", "48 vCPU (24 core), 372 GB memory, 8 Local SSD disks"),
+                            ("c4-highmem-96-lssd", "96 vCPU (48 core), 744 GB memory, 16 Local SSD disks"),
+                            ("c4-highmem-144-lssd", "144 vCPU (72 core), 1,116 GB memory, 24 Local SSD disks"),
+                            ("c4-highmem-192-lssd", "192 vCPU (96 core), 1,488 GB memory, 32 Local SSD disks"),
+                            ("c4-highmem-288-lssd", "288 vCPU (144 core), 2,232 GB memory, 48 Local SSD disks")
+                        ],
+                        "High CPU": [
+                            ("c4-highcpu-2", "2 vCPU (1 core), 4 GB memory"),
+                            ("c4-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
+                            ("c4-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
+                            ("c4-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
+                            ("c4-highcpu-24", "24 vCPU (12 core), 48 GB memory"),
+                            ("c4-highcpu-32", "32 vCPU (16 core), 64 GB memory"),
+                            ("c4-highcpu-48", "48 vCPU (24 core), 96 GB memory"),
+                            ("c4-highcpu-96", "96 vCPU (48 core), 192 GB memory"),
+                            ("c4-highcpu-144", "144 vCPU (72 core), 288 GB memory"),
+                            ("c4-highcpu-192", "192 vCPU (96 core), 384 GB memory"),
+                            ("c4-highcpu-288", "288 vCPU (144 core), 576 GB memory")
+                        ]
+                    },
+                    "C4A": {
+                        "Standard": [
+                            ("c4a-standard-1", "1 vCPU, 4 GB memory"),
+                            ("c4a-standard-2", "2 vCPU, 8 GB memory"),
+                            ("c4a-standard-4", "4 vCPU, 16 GB memory"),
+                            ("c4a-standard-8", "8 vCPU, 32 GB memory"),
+                            ("c4a-standard-16", "16 vCPU, 64 GB memory"),
+                            ("c4a-standard-32", "32 vCPU, 128 GB memory"),
+                            ("c4a-standard-48", "48 vCPU, 192 GB memory"),
+                            ("c4a-standard-64", "64 vCPU, 256 GB memory"),
+                            ("c4a-standard-72", "72 vCPU, 288 GB memory")
+                        ],
+                        "Standard with local SSD": [
+                            ("c4a-standard-4-lssd", "4 vCPU, 16 GB memory, 1 Local SSD disks"),
+                            ("c4a-standard-8-lssd", "8 vCPU, 32 GB memory, 2 Local SSD disks"),
+                            ("c4a-standard-16-lssd", "16 vCPU, 64 GB memory, 4 Local SSD disks"),
+                            ("c4a-standard-32-lssd", "32 vCPU, 128 GB memory, 6 Local SSD disks"),
+                            ("c4a-standard-48-lssd", "48 vCPU, 192 GB memory, 10 Local SSD disks"),
+                            ("c4a-standard-64-lssd", "64 vCPU, 256 GB memory, 14 Local SSD disks"),
+                            ("c4a-standard-72-lssd", "72 vCPU, 288 GB memory, 16 Local SSD disks")
+                        ],
+                        "High memory": [
+                            ("c4a-highmem-1", "1 vCPU, 8 GB memory"),
+                            ("c4a-highmem-2", "2 vCPU, 16 GB memory"),
+                            ("c4a-highmem-4", "4 vCPU, 32 GB memory"),
+                            ("c4a-highmem-8", "8 vCPU, 64 GB memory"),
+                            ("c4a-highmem-16", "16 vCPU, 128 GB memory"),
+                            ("c4a-highmem-32", "32 vCPU, 256 GB memory"),
+                            ("c4a-highmem-48", "48 vCPU, 384 GB memory"),
+                            ("c4a-highmem-64", "64 vCPU, 512 GB memory"),
+                            ("c4a-highmem-72", "72 vCPU, 576 GB memory")
+                        ],
+                        "High memory with local SSD": [
+                            ("c4a-highmem-4-lssd", "4 vCPU, 32 GB memory, 1 Local SSD disks"),
+                            ("c4a-highmem-8-lssd", "8 vCPU, 64 GB memory, 2 Local SSD disks"),
+                            ("c4a-highmem-16-lssd", "16 vCPU, 128 GB memory, 4 Local SSD disks"),
+                            ("c4a-highmem-32-lssd", "32 vCPU, 256 GB memory, 6 Local SSD disks"),
+                            ("c4a-highmem-48-lssd", "48 vCPU, 384 GB memory, 10 Local SSD disks"),
+                            ("c4a-highmem-64-lssd", "64 vCPU, 512 GB memory, 14 Local SSD disks"),
+                            ("c4a-highmem-72-lssd", "72 vCPU, 576 GB memory, 16 Local SSD disks")
+                        ],
+                        "High CPU": [
+                            ("c4a-highcpu-1", "1 vCPU, 2 GB memory"),
+                            ("c4a-highcpu-2", "2 vCPU, 4 GB memory"),
+                            ("c4a-highcpu-4", "4 vCPU, 8 GB memory"),
+                            ("c4a-highcpu-8", "8 vCPU, 16 GB memory"),
+                            ("c4a-highcpu-16", "16 vCPU, 32 GB memory"),
+                            ("c4a-highcpu-32", "32 vCPU, 64 GB memory"),
+                            ("c4a-highcpu-48", "48 vCPU, 96 GB memory"),
+                            ("c4a-highcpu-64", "64 vCPU, 128 GB memory"),
+                            ("c4a-highcpu-72", "72 vCPU, 144 GB memory")
+                        ]
+                    },
+                    "C4D": {
+                        "Standard": [
+                            ("c4d-standard-2", "2 vCPU (1 core), 7 GB memory"),
+                            ("c4d-standard-4", "4 vCPU (2 core), 15 GB memory"),
+                            ("c4d-standard-8", "8 vCPU (4 core), 31 GB memory"),
+                            ("c4d-standard-16", "16 vCPU (8 core), 62 GB memory"),
+                            ("c4d-standard-32", "32 vCPU (16 core), 124 GB memory"),
+                            ("c4d-standard-48", "48 vCPU (24 core), 186 GB memory"),
+                            ("c4d-standard-64", "64 vCPU (32 core), 248 GB memory"),
+                            ("c4d-standard-96", "96 vCPU (48 core), 372 GB memory"),
+                            ("c4d-standard-192", "192 vCPU (96 core), 744 GB memory"),
+                            ("c4d-standard-384", "384 vCPU (192 core), 1,488 GB memory"),
+                            ("c4d-standard-384-metal", "384 vCPU, 1,536 GB memory")
+                        ],
+                        "Standard with local SSD": [
+                            ("c4d-standard-8-lssd", "8 vCPU (4 core), 31 GB memory, 1 Local SSD disks"),
+                            ("c4d-standard-16-lssd", "16 vCPU (8 core), 62 GB memory, 1 Local SSD disks"),
+                            ("c4d-standard-32-lssd", "32 vCPU (16 core), 124 GB memory, 2 Local SSD disks"),
+                            ("c4d-standard-48-lssd", "48 vCPU (24 core), 186 GB memory, 4 Local SSD disks"),
+                            ("c4d-standard-64-lssd", "64 vCPU (32 core), 248 GB memory, 6 Local SSD disks"),
+                            ("c4d-standard-96-lssd", "96 vCPU (48 core), 372 GB memory, 8 Local SSD disks"),
+                            ("c4d-standard-192-lssd", "192 vCPU (96 core), 744 GB memory, 16 Local SSD disks"),
+                            ("c4d-standard-384-lssd", "384 vCPU (192 core), 1,488 GB memory, 32 Local SSD disks")
+                        ],
+                        "High memory": [
+                            ("c4d-highmem-2", "2 vCPU (1 core), 15 GB memory"),
+                            ("c4d-highmem-4", "4 vCPU (2 core), 31 GB memory"),
+                            ("c4d-highmem-8", "8 vCPU (4 core), 63 GB memory"),
+                            ("c4d-highmem-16", "16 vCPU (8 core), 126 GB memory"),
+                            ("c4d-highmem-32", "32 vCPU (16 core), 252 GB memory"),
+                            ("c4d-highmem-48", "48 vCPU (24 core), 378 GB memory"),
+                            ("c4d-highmem-64", "64 vCPU (32 core), 504 GB memory"),
+                            ("c4d-highmem-96", "96 vCPU (48 core), 756 GB memory"),
+                            ("c4d-highmem-192", "192 vCPU (96 core), 1,512 GB memory"),
+                            ("c4d-highmem-384", "384 vCPU (192 core), 3,024 GB memory"),
+                            ("c4d-highmem-384-metal", "384 vCPU, 3,072 GB memory")
+                        ],
+                        "High memory with local SSD": [
+                            ("c4d-highmem-8-lssd", "8 vCPU (4 core), 63 GB memory, 1 Local SSD disks"),
+                            ("c4d-highmem-16-lssd", "16 vCPU (8 core), 126 GB memory, 1 Local SSD disks"),
+                            ("c4d-highmem-32-lssd", "32 vCPU (16 core), 252 GB memory, 2 Local SSD disks"),
+                            ("c4d-highmem-48-lssd", "48 vCPU (24 core), 378 GB memory, 4 Local SSD disks"),
+                            ("c4d-highmem-64-lssd", "64 vCPU (32 core), 504 GB memory, 6 Local SSD disks"),
+                            ("c4d-highmem-96-lssd", "96 vCPU (48 core), 756 GB memory, 8 Local SSD disks"),
+                            ("c4d-highmem-192-lssd", "192 vCPU (96 core), 1,512 GB memory, 16 Local SSD disks"),
+                            ("c4d-highmem-384-lssd", "384 vCPU (192 core), 3,024 GB memory, 32 Local SSD disks")
+                        ],
+                        "High CPU": [
+                            ("c4d-highcpu-2", "2 vCPU (1 core), 3 GB memory"),
+                            ("c4d-highcpu-4", "4 vCPU (2 core), 7 GB memory"),
+                            ("c4d-highcpu-8", "8 vCPU (4 core), 15 GB memory"),
+                            ("c4d-highcpu-16", "16 vCPU (8 core), 30 GB memory"),
+                            ("c4d-highcpu-32", "32 vCPU (16 core), 60 GB memory"),
+                            ("c4d-highcpu-48", "48 vCPU (24 core), 90 GB memory"),
+                            ("c4d-highcpu-64", "64 vCPU (32 core), 120 GB memory"),
+                            ("c4d-highcpu-96", "96 vCPU (48 core), 180 GB memory"),
+                            ("c4d-highcpu-192", "192 vCPU (96 core), 360 GB memory"),
+                            ("c4d-highcpu-384", "384 vCPU (192 core), 720 GB memory"),
+                            ("c4d-highcpu-384-metal", "384 vCPU, 768 GB memory")
+                        ]
+                    },
+                    "N4": {
+                        "Standard": [
+                            ("n4-standard-2", "2 vCPU (1 core), 8 GB memory"),
+                            ("n4-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                            ("n4-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                            ("n4-standard-16", "16 vCPU (8 core), 64 GB memory"),
+                            ("n4-standard-32", "32 vCPU (16 core), 128 GB memory"),
+                            ("n4-standard-48", "48 vCPU (24 core), 192 GB memory"),
+                            ("n4-standard-64", "64 vCPU (32 core), 256 GB memory"),
+                            ("n4-standard-80", "80 vCPU (40 core), 320 GB memory")
+                        ],
+                        "High memory": [
+                            ("n4-highmem-2", "2 vCPU (1 core), 16 GB memory"),
+                            ("n4-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                            ("n4-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                            ("n4-highmem-16", "16 vCPU (8 core), 128 GB memory"),
+                            ("n4-highmem-32", "32 vCPU (16 core), 256 GB memory"),
+                            ("n4-highmem-48", "48 vCPU (24 core), 384 GB memory"),
+                            ("n4-highmem-64", "64 vCPU (32 core), 512 GB memory"),
+                            ("n4-highmem-80", "80 vCPU (40 core), 640 GB memory")
+                        ],
+                        "High CPU": [
+                            ("n4-highcpu-2", "2 vCPU (1 core), 4 GB memory"),
+                            ("n4-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
+                            ("n4-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
+                            ("n4-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
+                            ("n4-highcpu-32", "32 vCPU (16 core), 64 GB memory"),
+                            ("n4-highcpu-48", "48 vCPU (24 core), 96 GB memory"),
+                            ("n4-highcpu-64", "64 vCPU (32 core), 128 GB memory"),
+                            ("n4-highcpu-80", "80 vCPU (40 core), 160 GB memory")
+                        ]
+                    },
+                    "C3": {
+                        "Standard": [
+                            ("c3-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                            ("c3-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                            ("c3-standard-22", "22 vCPU (11 core), 88 GB memory"),
+                            ("c3-standard-44", "44 vCPU (22 core), 176 GB memory"),
+                            ("c3-standard-88", "88 vCPU (44 core), 352 GB memory"),
+                            ("c3-standard-176", "176 vCPU (88 core), 704 GB memory"),
+                            ("c3-standard-192-metal", "192 vCPU, 768 GB memory")
+                        ],
+                        "Standard with local SSD": [
+                            ("c3-standard-4-lssd", "4 vCPU (2 core), 16 GB memory, 1 Local SSD disks"),
+                            ("c3-standard-8-lssd", "8 vCPU (4 core), 32 GB memory, 2 Local SSD disks"),
+                            ("c3-standard-22-lssd", "22 vCPU (11 core), 88 GB memory, 4 Local SSD disks"),
+                            ("c3-standard-44-lssd", "44 vCPU (22 core), 176 GB memory, 8 Local SSD disks"),
+                            ("c3-standard-88-lssd", "88 vCPU (44 core), 352 GB memory, 16 Local SSD disks"),
+                            ("c3-standard-176-lssd", "176 vCPU (88 core), 704 GB memory, 32 Local SSD disks")
+                        ],
+                        "High memory": [
+                            ("c3-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                            ("c3-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                            ("c3-highmem-22", "22 vCPU (11 core), 176 GB memory"),
+                            ("c3-highmem-44", "44 vCPU (22 core), 352 GB memory"),
+                            ("c3-highmem-88", "88 vCPU (44 core), 704 GB memory"),
+                            ("c3-highmem-176", "176 vCPU (88 core), 1,408 GB memory"),
+                            ("c3-highmem-192-metal", "192 vCPU, 1,536 GB memory")
+                        ],
+                        "High CPU": [
+                            ("c3-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
+                            ("c3-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
+                            ("c3-highcpu-22", "22 vCPU (11 core), 44 GB memory"),
+                            ("c3-highcpu-44", "44 vCPU (22 core), 88 GB memory"),
+                            ("c3-highcpu-88", "88 vCPU (44 core), 176 GB memory"),
+                            ("c3-highcpu-176", "176 vCPU (88 core), 352 GB memory"),
+                            ("c3-highcpu-192-metal", "192 vCPU, 512 GB memory")
+                        ]
+                    },
+                    "C3D": {
+                        "Standard": [
+                            ("c3d-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                            ("c3d-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                            ("c3d-standard-16", "16 vCPU (8 core), 64 GB memory"),
+                            ("c3d-standard-30", "30 vCPU (15 core), 120 GB memory"),
+                            ("c3d-standard-60", "60 vCPU (30 core), 240 GB memory"),
+                            ("c3d-standard-90", "90 vCPU (45 core), 360 GB memory"),
+                            ("c3d-standard-180", "180 vCPU (90 core), 720 GB memory"),
+                            ("c3d-standard-360", "360 vCPU (180 core), 1,440 GB memory")
+                        ],
+                        "Standard with local SSD": [
+                            ("c3d-standard-8-lssd", "8 vCPU (4 core), 32 GB memory, 1 Local SSD disks"),
+                            ("c3d-standard-16-lssd", "16 vCPU (8 core), 64 GB memory, 1 Local SSD disks"),
+                            ("c3d-standard-30-lssd", "30 vCPU (15 core), 120 GB memory, 2 Local SSD disks"),
+                            ("c3d-standard-60-lssd", "60 vCPU (30 core), 240 GB memory, 4 Local SSD disks"),
+                            ("c3d-standard-90-lssd", "90 vCPU (45 core), 360 GB memory, 8 Local SSD disks"),
+                            ("c3d-standard-180-lssd", "180 vCPU (90 core), 720 GB memory, 16 Local SSD disks"),
+                            ("c3d-standard-360-lssd", "360 vCPU (180 core), 1,440 GB memory, 32 Local SSD disks")
+                        ],
+                        "High memory": [
+                            ("c3d-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                            ("c3d-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                            ("c3d-highmem-16", "16 vCPU (8 core), 128 GB memory"),
+                            ("c3d-highmem-30", "30 vCPU (15 core), 240 GB memory"),
+                            ("c3d-highmem-60", "60 vCPU (30 core), 480 GB memory"),
+                            ("c3d-highmem-90", "90 vCPU (45 core), 720 GB memory"),
+                            ("c3d-highmem-180", "180 vCPU (90 core), 1,440 GB memory"),
+                            ("c3d-highmem-360", "360 vCPU (180 core), 2,880 GB memory")
+                        ],
+                        "High memory with local SSD": [
+                            ("c3d-highmem-8-lssd", "8 vCPU (4 core), 64 GB memory, 1 Local SSD disks"),
+                            ("c3d-highmem-16-lssd", "16 vCPU (8 core), 128 GB memory, 1 Local SSD disks"),
+                            ("c3d-highmem-30-lssd", "30 vCPU (15 core), 240 GB memory, 2 Local SSD disks"),
+                            ("c3d-highmem-60-lssd", "60 vCPU (30 core), 480 GB memory, 4 Local SSD disks"),
+                            ("c3d-highmem-90-lssd", "90 vCPU (45 core), 720 GB memory, 8 Local SSD disks"),
+                            ("c3d-highmem-180-lssd", "180 vCPU (90 core), 1,440 GB memory, 16 Local SSD disks"),
+                            ("c3d-highmem-360-lssd", "360 vCPU (180 core), 2,880 GB memory, 32 Local SSD disks")
+                        ],
+                        "High CPU": [
+                            ("c3d-highcpu-4", "4 vCPU (2 core), 8 GB memory"),
+                            ("c3d-highcpu-8", "8 vCPU (4 core), 16 GB memory"),
+                            ("c3d-highcpu-16", "16 vCPU (8 core), 32 GB memory"),
+                            ("c3d-highcpu-30", "30 vCPU (15 core), 59 GB memory"),
+                            ("c3d-highcpu-60", "60 vCPU (30 core), 118 GB memory"),
+                            ("c3d-highcpu-90", "90 vCPU (45 core), 177 GB memory"),
+                            ("c3d-highcpu-180", "180 vCPU (90 core), 354 GB memory"),
+                            ("c3d-highcpu-360", "360 vCPU (180 core), 708 GB memory")
+                        ]
+                    },
+                    "E2": {
+                        "Shared-core": [
+                            ("e2-micro", "0.25-2 vCPU (1 shared core), 1 GB memory"),
+                            ("e2-small", "0.5-2 vCPU (1 shared core), 2 GB memory"),
+                            ("e2-medium", "1-2 vCPU (1 shared core), 4 GB memory")
+                        ],
+                        "Standard": [
+                            ("e2-standard-2", "2 vCPU (1 core), 8 GB memory"),
+                            ("e2-standard-4", "4 vCPU (2 cores), 16 GB memory"),
+                            ("e2-standard-8", "8 vCPU (4 cores), 32 GB memory"),
+                            ("e2-standard-16", "16 vCPU (8 cores), 64 GB memory"),
+                            ("e2-standard-32", "32 vCPU (16 cores), 128 GB memory")
+                        ],
+                        "High memory": [
+                            ("e2-highmem-2", "2 vCPU (1 core), 16 GB memory"),
+                            ("e2-highmem-4", "4 vCPU (2 cores), 32 GB memory"),
+                            ("e2-highmem-8", "8 vCPU (4 cores), 64 GB memory"),
+                            ("e2-highmem-16", "16 vCPU (8 cores), 128 GB memory")
+                        ],
+                        "High CPU": [
+                            ("e2-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
+                            ("e2-highcpu-4", "4 vCPU (2 cores), 4 GB memory"),
+                            ("e2-highcpu-8", "8 vCPU (4 cores), 8 GB memory"),
+                            ("e2-highcpu-16", "16 vCPU (8 cores), 16 GB memory"),
+                            ("e2-highcpu-32", "32 vCPU (16 cores), 32 GB memory")
+                        ]
+                    },
+                    "N2": {
+                        "Standard": [
+                            ("n2-standard-2", "2 vCPU (1 core), 8 GB memory"),
+                            ("n2-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                            ("n2-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                            ("n2-standard-16", "16 vCPU (8 core), 64 GB memory"),
+                            ("n2-standard-32", "32 vCPU (16 core), 128 GB memory"),
+                            ("n2-standard-48", "48 vCPU (24 core), 192 GB memory"),
+                            ("n2-standard-64", "64 vCPU (32 core), 256 GB memory"),
+                            ("n2-standard-80", "80 vCPU (40 core), 320 GB memory"),
+                            ("n2-standard-96", "96 vCPU (48 core), 384 GB memory"),
+                            ("n2-standard-128", "128 vCPU (64 core), 512 GB memory")
+                        ],
+                        "High memory": [
+                            ("n2-highmem-2", "2 vCPU (1 core), 16 GB memory"),
+                            ("n2-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                            ("n2-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                            ("n2-highmem-16", "16 vCPU (8 core), 128 GB memory"),
+                            ("n2-highmem-32", "32 vCPU (16 core), 256 GB memory"),
+                            ("n2-highmem-48", "48 vCPU (24 core), 384 GB memory"),
+                            ("n2-highmem-64", "64 vCPU (32 core), 512 GB memory"),
+                            ("n2-highmem-80", "80 vCPU (40 core), 640 GB memory"),
+                            ("n2-highmem-96", "96 vCPU (48 core), 768 GB memory"),
+                            ("n2-highmem-128", "128 vCPU (64 core), 864 GB memory")
+                        ],
+                        "High CPU": [
+                            ("n2-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
+                            ("n2-highcpu-4", "4 vCPU (2 core), 4 GB memory"),
+                            ("n2-highcpu-8", "8 vCPU (4 core), 8 GB memory"),
+                            ("n2-highcpu-16", "16 vCPU (8 core), 16 GB memory"),
+                            ("n2-highcpu-32", "32 vCPU (16 core), 32 GB memory"),
+                            ("n2-highcpu-48", "48 vCPU (24 core), 48 GB memory"),
+                            ("n2-highcpu-64", "64 vCPU (32 core), 64 GB memory"),
+                            ("n2-highcpu-80", "80 vCPU (40 core), 80 GB memory"),
+                            ("n2-highcpu-96", "96 vCPU (48 core), 96 GB memory")
+                        ]
+                    },
+                    "N2D": {
+                        "Standard": [
+                            ("n2d-standard-2", "2 vCPU (1 core), 8 GB memory"),
+                            ("n2d-standard-4", "4 vCPU (2 core), 16 GB memory"),
+                            ("n2d-standard-8", "8 vCPU (4 core), 32 GB memory"),
+                            ("n2d-standard-16", "16 vCPU (8 core), 64 GB memory"),
+                            ("n2d-standard-32", "32 vCPU (16 core), 128 GB memory"),
+                            ("n2d-standard-48", "48 vCPU (24 core), 192 GB memory"),
+                            ("n2d-standard-64", "64 vCPU (32 core), 256 GB memory"),
+                            ("n2d-standard-80", "80 vCPU (40 core), 320 GB memory"),
+                            ("n2d-standard-96", "96 vCPU (48 core), 384 GB memory"),
+                            ("n2d-standard-128", "128 vCPU (64 core), 512 GB memory"),
+                            ("n2d-standard-224", "224 vCPU (112 core), 896 GB memory")
+                        ],
+                        "High memory": [
+                            ("n2d-highmem-2", "2 vCPU (1 core), 16 GB memory"),
+                            ("n2d-highmem-4", "4 vCPU (2 core), 32 GB memory"),
+                            ("n2d-highmem-8", "8 vCPU (4 core), 64 GB memory"),
+                            ("n2d-highmem-16", "16 vCPU (8 core), 128 GB memory"),
+                            ("n2d-highmem-32", "32 vCPU (16 core), 256 GB memory"),
+                            ("n2d-highmem-48", "48 vCPU (24 core), 384 GB memory"),
+                            ("n2d-highmem-64", "64 vCPU (32 core), 512 GB memory"),
+                            ("n2d-highmem-80", "80 vCPU (40 core), 640 GB memory"),
+                            ("n2d-highmem-96", "96 vCPU (48 core), 768 GB memory")
+                        ],
+                        "High CPU": [
+                            ("n2d-highcpu-2", "2 vCPU (1 core), 2 GB memory"),
+                            ("n2d-highcpu-4", "4 vCPU (2 core), 4 GB memory"),
+                            ("n2d-highcpu-8", "8 vCPU (4 core), 8 GB memory"),
+                            ("n2d-highcpu-16", "16 vCPU (8 core), 16 GB memory"),
+                            ("n2d-highcpu-32", "32 vCPU (16 core), 32 GB memory"),
+                            ("n2d-highcpu-48", "48 vCPU (24 core), 48 GB memory"),
+                            ("n2d-highcpu-64", "64 vCPU (32 core), 64 GB memory"),
+                            ("n2d-highcpu-80", "80 vCPU (40 core), 80 GB memory"),
+                            ("n2d-highcpu-96", "96 vCPU (48 core), 96 GB memory"),
+                            ("n2d-highcpu-128", "128 vCPU (64 core), 128 GB memory"),
+                            ("n2d-highcpu-224", "224 vCPU (112 core), 224 GB memory")
+                        ]
+                    },
+                    "T2A": {
+                        "Standard": [
+                            ("t2a-standard-1", "1 vCPU, 4 GB memory"),
+                            ("t2a-standard-2", "2 vCPU, 8 GB memory"),
+                            ("t2a-standard-4", "4 vCPU, 16 GB memory"),
+                            ("t2a-standard-8", "8 vCPU, 32 GB memory"),
+                            ("t2a-standard-16", "16 vCPU, 64 GB memory"),
+                            ("t2a-standard-32", "32 vCPU, 128 GB memory"),
+                            ("t2a-standard-48", "48 vCPU, 192 GB memory")
+                        ]
+                    },
+                    "T2D": {
+                        "Standard": [
+                            ("t2d-standard-1", "1 vCPU, 4 GB memory"),
+                            ("t2d-standard-2", "2 vCPU, 8 GB memory"),
+                            ("t2d-standard-4", "4 vCPU, 16 GB memory"),
+                            ("t2d-standard-8", "8 vCPU, 32 GB memory"),
+                            ("t2d-standard-16", "16 vCPU, 64 GB memory"),
+                            ("t2d-standard-32", "32 vCPU, 128 GB memory"),
+                            ("t2d-standard-48", "48 vCPU, 192 GB memory"),
+                            ("t2d-standard-60", "60 vCPU, 240 GB memory")
+                        ]
+                    },
+                    "N1": {
+                        "Shared-core": [
+                            ("f1-micro", "0.25-1 vCPU (1 shared core), 614 MB memory"),
+                            ("g1-small", "0.5-1 vCPU (1 shared core), 1.7 GB memory")
+                        ],
+                        "Standard": [
+                            ("n1-standard-1", "1 vCPU, 3.75 GB memory"),
+                            ("n1-standard-2", "2 vCPU (1 core), 7.5 GB memory"),
+                            ("n1-standard-4", "4 vCPU (2 core), 15 GB memory"),
+                            ("n1-standard-8", "8 vCPU (4 core), 30 GB memory"),
+                            ("n1-standard-16", "16 vCPU (8 core), 60 GB memory"),
+                            ("n1-standard-32", "32 vCPU (16 core), 120 GB memory"),
+                            ("n1-standard-64", "64 vCPU (32 core), 240 GB memory"),
+                            ("n1-standard-96", "96 vCPU (48 core), 360 GB memory")
+                        ],
+                        "High memory": [
+                            ("n1-highmem-2", "2 vCPU (1 core), 13 GB memory"),
+                            ("n1-highmem-4", "4 vCPU (2 core), 26 GB memory"),
+                            ("n1-highmem-8", "8 vCPU (4 core), 52 GB memory"),
+                            ("n1-highmem-16", "16 vCPU (8 core), 104 GB memory"),
+                            ("n1-highmem-32", "32 vCPU (16 core), 208 GB memory"),
+                            ("n1-highmem-64", "64 vCPU (32 core), 416 GB memory"),
+                            ("n1-highmem-96", "96 vCPU (48 core), 624 GB memory")
+                        ],
+                        "High CPU": [
+                            ("n1-highcpu-2", "2 vCPU (1 core), 1.8 GB memory"),
+                            ("n1-highcpu-4", "4 vCPU (2 core), 3.6 GB memory"),
+                            ("n1-highcpu-8", "8 vCPU (4 core), 7.2 GB memory"),
+                            ("n1-highcpu-16", "16 vCPU (8 core), 14.4 GB memory"),
+                            ("n1-highcpu-32", "32 vCPU (16 core), 28.8 GB memory"),
+                            ("n1-highcpu-64", "64 vCPU (32 core), 57.6 GB memory"),
+                            ("n1-highcpu-96", "96 vCPU (48 core), 86.4 GB memory")
+                        ]
+                    }
+                }
+                return presets.get(series, {})
+
+            # ---- Machine type presets (General purpose) ----
+            def gp_series_catalog() -> Dict[str, Dict[str, Dict[str, list]]]:
+                """Return General purpose series with profiles and machine presets."""
+                return {
+                    "C4": {
+                        "Standard": {
+                            "presets": [
+                                "c4-standard-2", "c4-standard-4", "c4-standard-8", "c4-standard-16", 
+                                "c4-standard-32", "c4-standard-64", "c4-standard-96", "c4-standard-128",
+                                "c4-standard-160", "c4-standard-192", "c4-standard-224", "c4-standard-256", "c4-standard-288"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "c4-highmem-2", "c4-highmem-4", "c4-highmem-8", "c4-highmem-16",
+                                "c4-highmem-32", "c4-highmem-64", "c4-highmem-96", "c4-highmem-128",
+                                "c4-highmem-160", "c4-highmem-192", "c4-highmem-224", "c4-highmem-256", "c4-highmem-288"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "c4-highcpu-2", "c4-highcpu-4", "c4-highcpu-8", "c4-highcpu-16",
+                                "c4-highcpu-32", "c4-highcpu-64", "c4-highcpu-96", "c4-highcpu-128",
+                                "c4-highcpu-160", "c4-highcpu-192", "c4-highcpu-224", "c4-highcpu-256", "c4-highcpu-288"
+                            ]
+                        }
+                    },
+                    "C4A": {
+                        "Standard": {
+                            "presets": [
+                                "c4a-standard-1", "c4a-standard-2", "c4a-standard-4", "c4a-standard-8",
+                                "c4a-standard-16", "c4a-standard-32", "c4a-standard-48", "c4a-standard-64", "c4a-standard-72"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "c4a-highmem-1", "c4a-highmem-2", "c4a-highmem-4", "c4a-highmem-8",
+                                "c4a-highmem-16", "c4a-highmem-32", "c4a-highmem-48", "c4a-highmem-64", "c4a-highmem-72"
+                            ]
+                        }
+                    },
+                    "C4D": {
+                        "Standard": {
+                            "presets": [
+                                "c4d-standard-2", "c4d-standard-4", "c4d-standard-8", "c4d-standard-16",
+                                "c4d-standard-32", "c4d-standard-64", "c4d-standard-96", "c4d-standard-128",
+                                "c4d-standard-160", "c4d-standard-192", "c4d-standard-224", "c4d-standard-256",
+                                "c4d-standard-288", "c4d-standard-320", "c4d-standard-352", "c4d-standard-384"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "c4d-highmem-2", "c4d-highmem-4", "c4d-highmem-8", "c4d-highmem-16",
+                                "c4d-highmem-32", "c4d-highmem-64", "c4d-highmem-96", "c4d-highmem-128",
+                                "c4d-highmem-160", "c4d-highmem-192", "c4d-highmem-224", "c4d-highmem-256",
+                                "c4d-highmem-288", "c4d-highmem-320", "c4d-highmem-352", "c4d-highmem-384"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "c4d-highcpu-2", "c4d-highcpu-4", "c4d-highcpu-8", "c4d-highcpu-16",
+                                "c4d-highcpu-32", "c4d-highcpu-64", "c4d-highcpu-96", "c4d-highcpu-128",
+                                "c4d-highcpu-160", "c4d-highcpu-192", "c4d-highcpu-224", "c4d-highcpu-256",
+                                "c4d-highcpu-288", "c4d-highcpu-320", "c4d-highcpu-352", "c4d-highcpu-384"
+                            ]
+                        }
+                    },
+                    "N4": {
+                        "Standard": {
+                            "presets": [
+                                "n4-standard-2", "n4-standard-4", "n4-standard-8", "n4-standard-16",
+                                "n4-standard-32", "n4-standard-64", "n4-standard-80"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "n4-highmem-2", "n4-highmem-4", "n4-highmem-8", "n4-highmem-16",
+                                "n4-highmem-32", "n4-highmem-64", "n4-highmem-80"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "n4-highcpu-2", "n4-highcpu-4", "n4-highcpu-8", "n4-highcpu-16",
+                                "n4-highcpu-32", "n4-highcpu-64", "n4-highcpu-80"
+                            ]
+                        }
+                    },
+                    "C3": {
+                        "Standard": {
+                            "presets": [
+                                "c3-standard-4", "c3-standard-8", "c3-standard-22", "c3-standard-44",
+                                "c3-standard-88", "c3-standard-176", "c3-standard-192"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "c3-highmem-4", "c3-highmem-8", "c3-highmem-22", "c3-highmem-44",
+                                "c3-highmem-88", "c3-highmem-176", "c3-highmem-192"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "c3-highcpu-4", "c3-highcpu-8", "c3-highcpu-22", "c3-highcpu-44",
+                                "c3-highcpu-88", "c3-highcpu-176", "c3-highcpu-192"
+                            ]
+                        }
+                    },
+                    "C3D": {
+                        "Standard": {
+                            "presets": [
+                                "c3d-standard-4","c3d-standard-8","c3d-standard-16","c3d-standard-30",
+                                "c3d-standard-60","c3d-standard-90","c3d-standard-180","c3d-standard-360",
+                                "c3d-standard-8-lssd","c3d-standard-16-lssd","c3d-standard-30-lssd",
+                                "c3d-standard-60-lssd","c3d-standard-90-lssd","c3d-standard-180-lssd","c3d-standard-360-lssd"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "c3d-highmem-4","c3d-highmem-8","c3d-highmem-16","c3d-highmem-30",
+                                "c3d-highmem-60","c3d-highmem-90","c3d-highmem-180","c3d-highmem-360",
+                                "c3d-highmem-8-lssd","c3d-highmem-16-lssd","c3d-highmem-30-lssd",
+                                "c3d-highmem-60-lssd","c3d-highmem-90-lssd","c3d-highmem-180-lssd","c3d-highmem-360-lssd"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "c3d-highcpu-4","c3d-highcpu-8","c3d-highcpu-16","c3d-highcpu-30",
+                                "c3d-highcpu-60","c3d-highcpu-90","c3d-highcpu-180","c3d-highcpu-360"
+                            ]
+                        }
+                    },
+                    "E2": {
+                        "Standard": {
+                            "presets": [
+                                "e2-micro", "e2-small", "e2-medium", "e2-standard-2", "e2-standard-4", 
+                                "e2-standard-8", "e2-standard-16", "e2-standard-32"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "e2-highmem-2", "e2-highmem-4", "e2-highmem-8", "e2-highmem-16"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "e2-highcpu-2", "e2-highcpu-4", "e2-highcpu-8", "e2-highcpu-16", "e2-highcpu-32"
+                            ]
+                        }
+                    },
+                    "N2": {
+                        "Standard": {
+                            "presets": [
+                                "n2-standard-2", "n2-standard-4", "n2-standard-8", "n2-standard-16", 
+                                "n2-standard-32", "n2-standard-48", "n2-standard-64", "n2-standard-80", 
+                                "n2-standard-96", "n2-standard-128"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "n2-highmem-2", "n2-highmem-4", "n2-highmem-8", "n2-highmem-16",
+                                "n2-highmem-32", "n2-highmem-48", "n2-highmem-64", "n2-highmem-80", "n2-highmem-96", "n2-highmem-128"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "n2-highcpu-2", "n2-highcpu-4", "n2-highcpu-8", "n2-highcpu-16",
+                                "n2-highcpu-32", "n2-highcpu-48", "n2-highcpu-64", "n2-highcpu-80", "n2-highcpu-96", "n2-highcpu-128"
+                            ]
+                        }
+                    },
+                    "N2D": {
+                        "Standard": {
+                            "presets": [
+                                "n2d-standard-2", "n2d-standard-4", "n2d-standard-8", "n2d-standard-16", 
+                                "n2d-standard-32", "n2d-standard-48", "n2d-standard-64", "n2d-standard-80", 
+                                "n2d-standard-96", "n2d-standard-128", "n2d-standard-224"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "n2d-highmem-2", "n2d-highmem-4", "n2d-highmem-8", "n2d-highmem-16",
+                                "n2d-highmem-32", "n2d-highmem-48", "n2d-highmem-64", "n2d-highmem-80", "n2d-highmem-96", "n2d-highmem-128", "n2d-highmem-224"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "n2d-highcpu-2", "n2d-highcpu-4", "n2d-highcpu-8", "n2d-highcpu-16",
+                                "n2d-highcpu-32", "n2d-highcpu-48", "n2d-highcpu-64", "n2d-highcpu-80", "n2d-highcpu-96", "n2d-highcpu-128", "n2d-highcpu-224"
+                            ]
+                        }
+                    },
+                    "T2A": {
+                        "Standard": {
+                            "presets": [
+                                "t2a-standard-1", "t2a-standard-2", "t2a-standard-4", "t2a-standard-8",
+                                "t2a-standard-16", "t2a-standard-32", "t2a-standard-48"
+                            ]
+                        }
+                    },
+                    "T2D": {
+                        "Standard": {
+                            "presets": [
+                                "t2d-standard-1", "t2d-standard-2", "t2d-standard-4", "t2d-standard-8",
+                                "t2d-standard-16", "t2d-standard-32", "t2d-standard-48", "t2d-standard-60"
+                            ]
+                        }
+                    },
+                    "N1": {
+                        "Standard": {
+                            "presets": [
+                                "n1-standard-1", "n1-standard-2", "n1-standard-4", "n1-standard-8", 
+                                "n1-standard-16", "n1-standard-32", "n1-standard-64", "n1-standard-96"
+                            ]
+                        },
+                        "High memory": {
+                            "presets": [
+                                "n1-highmem-2", "n1-highmem-4", "n1-highmem-8", "n1-highmem-16",
+                                "n1-highmem-32", "n1-highmem-64", "n1-highmem-96"
+                            ]
+                        },
+                        "High CPU": {
+                            "presets": [
+                                "n1-highcpu-2", "n1-highcpu-4", "n1-highcpu-8", "n1-highcpu-16",
+                                "n1-highcpu-32", "n1-highcpu-64", "n1-highcpu-96"
+                            ]
+                        }
+                    }
+                }
+
+            # Display existing instances with inline editing and advanced options
+            if st.session_state.get("compute_instances"):
+                with st.expander(f"📋 Current Compute Instances ({len(st.session_state.compute_instances)})", expanded=False):
+                    for i, vm in enumerate(list(st.session_state.compute_instances)):
+                        # Region/Zone helpers
+                        regions = ["us-central1", "us-west1", "europe-west1", "asia-south1"]
+                        region_to_zones = {
+                            "us-central1": ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"],
+                            "us-west1": ["us-west1-a", "us-west1-b", "us-west1-c"],
+                            "europe-west1": ["europe-west1-b", "europe-west1-c", "europe-west1-d"],
+                            "asia-south1": ["asia-south1-a", "asia-south1-b", "asia-south1-c"],
+                        }
+
+                        col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
+                        with col1:
+                            new_name = st.text_input("Name", value=vm.get('name', ''), key=f"vm_name_{i}")
+                        with col2:
+                            # Region selection; default inferred from zone prefix
+                            current_zone = vm.get('zone', 'us-central1-a')
+                            inferred_region = vm.get('region') or current_zone.rsplit('-', 1)[0]
+                            r_val = inferred_region if inferred_region in regions else regions[0]
+                            r_idx = regions.index(r_val)
+                            new_region = st.selectbox("Region", regions, index=r_idx, key=f"vm_region_{i}")
+                        with col3:
+                            # Zone options based on region
+                            zones_list = region_to_zones.get(new_region, region_to_zones[regions[0]])
+                            z_val = current_zone if current_zone in zones_list else zones_list[0]
+                            z_idx = zones_list.index(z_val)
+                            new_zone = st.selectbox("Zone", zones_list, index=z_idx, key=f"vm_zone_{i}")
+                        with col4:
+                            # Machine type selection lives in Advanced VM Options below
+                            new_type = vm.get('machine_type', '')
+                            st.markdown(f"**Machine type**: `{new_type or 'not set'}`")
+                            if st.button("Change machine type", key=f"vm_change_type_{i}"):
+                                st.session_state[f"open_vm_adv_{i}"] = True
+                                # Don't rerun here - let the UI update naturally
+                        with col5:
+                            if st.button("🗑️", key=f"del_vm_{i}"):
+                                st.session_state.compute_instances.pop(i)
+                                st.rerun()
+
+                        with st.expander("🔧 Advanced VM Options", expanded=st.session_state.get(f"open_vm_adv_{i}", False)):
+                            # Inline Machine Type Selection (fallback if popup not used)
+                            st.markdown("**Machine Type Selection**")
+                            tabs = st.tabs(["General purpose", "Compute optimized", "Memory optimized", "Storage optimized", "GPUs"])
+                            with tabs[0]:
+                                # Machine Series Selection Table
+                                st.markdown("**Select Machine Series:**")
+                                series_data = get_machine_series_data()
+                                df = st.dataframe(
+                                    series_data,
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    on_select="rerun",
+                                    selection_mode="single-row",
+                                    key=f"machine_series_table_{i}"
+                                )
+                            
+                                # Get selected series
+                                selected_series = "E2"  # Default
+                                if df.selection.rows:
+                                    selected_series = series_data[df.selection.rows[0]]["Series"]
+                            
+                                # Update session state if series changed
+                                if f"selected_series_{i}" not in st.session_state:
+                                    st.session_state[f"selected_series_{i}"] = selected_series
+                                elif st.session_state[f"selected_series_{i}"] != selected_series:
+                                    st.session_state[f"selected_series_{i}"] = selected_series
+                                    # Don't rerun here - let the UI update naturally
+                            
+                                st.markdown(f"**Selected Series: {selected_series}**")
+                            
+                                # Get presets for selected series
+                                series_presets = get_series_presets(selected_series)
+                            
+                                # Check if series supports custom machine types
+                                custom_enabled_series = ["N4", "E2", "N2", "N2D", "N1"]
+                                supports_custom = selected_series in custom_enabled_series
+                            
+                                # Create tabs based on series support
+                                if supports_custom:
+                                    sub_tabs = st.tabs(["Preset", "Custom"])
+                                else:
+                                    sub_tabs = st.tabs(["Preset"])
+                                
+                                with sub_tabs[0]:
+                                    if series_presets:
+                                        families = list(series_presets.keys())
+                                        fam = st.radio("Instance sizes", families, horizontal=True, key=f"vm_family_{i}")
+                                    
+                                        if fam in series_presets:
+                                            opts = [f"{name} – {desc}" for name, desc in series_presets[fam]]
+                                            sel_opt = st.selectbox("Machine Type", opts, index=0, key=f"vm_opt_{i}")
+                                            chosen_mt = series_presets[fam][opts.index(sel_opt)][0]
+                                        
+                                            if chosen_mt != st.session_state.compute_instances[i].get('machine_type'):
+                                                st.session_state.compute_instances[i]['machine_type'] = chosen_mt
+                                                # Don't rerun here - let the UI update naturally
+                                    else:
+                                        st.info(f"No presets available for {selected_series} series.")
+                                    
+                                if supports_custom:
+                                    with sub_tabs[1]:
+                                        st.warning("⚠️ Creating a custom machine incurs additional costs")
+                                    
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            custom_vcpu = st.slider(
+                                                "Cores", 
+                                                min_value=1, 
+                                                max_value=96, 
+                                                value=2, 
+                                                key=f"custom_vcpu_{i}",
+                                                help="Number of vCPUs"
+                                            )
+                                        with col2:
+                                            custom_memory = st.slider(
+                                                "Memory (GB)", 
+                                                min_value=1.0, 
+                                                max_value=6.5, 
+                                                value=1.0, 
+                                                step=0.1, 
+                                                key=f"custom_memory_{i}",
+                                                help="Memory in GB"
+                                            )
+                                    
+                                        extend_memory = st.checkbox(
+                                            "Extend Memory", 
+                                            value=False, 
+                                            key=f"extend_memory_{i}",
+                                            help="Allow memory to exceed 6.5 GB per vCPU"
+                                        )
+                                    
+                                        if extend_memory:
+                                            max_memory = min(6.5 * custom_vcpu, 624.0)  # Max 624 GB for N1
+                                            custom_memory = st.slider(
+                                                "Extended Memory (GB)", 
+                                                min_value=1.0, 
+                                                max_value=max_memory, 
+                                                value=custom_memory, 
+                                                step=0.1, 
+                                                key=f"extended_memory_{i}",
+                                                help=f"Extended memory up to {max_memory:.1f} GB"
+                                            )
+                                    
+                                        # Generate custom machine type name
+                                        custom_mt = f"custom-{selected_series.lower()}-{custom_vcpu}-{int(custom_memory * 1024)}"
+                                    
+                                        if custom_mt != st.session_state.compute_instances[i].get('machine_type'):
+                                            st.session_state.compute_instances[i]['machine_type'] = custom_mt
+                                            # Don't rerun here - let the UI update naturally
+                            c1, c2, c3 = st.columns(3)
+                            with c1:
+                                new_image = st.text_input("Boot Image", value=vm.get('image', 'debian-cloud/debian-11'), key=f"vm_image_{i}")
+                                new_description = st.text_input("Description", value=vm.get('description', ''), key=f"vm_desc_{i}")
+                                new_hostname = st.text_input("Hostname (FQDN)", value=vm.get('hostname', ''), key=f"vm_host_{i}")
+                                new_min_cpu = st.text_input("Min CPU Platform", value=vm.get('min_cpu_platform', ''), key=f"vm_min_cpu_{i}")
+                            with c2:
+                                new_network = st.text_input("Network (name/self_link)", value=vm.get('network', ''), key=f"vm_net_{i}")
+                                new_subnet = st.text_input("Subnetwork (name/self_link)", value=vm.get('subnetwork', ''), key=f"vm_sub_{i}")
+                                new_network_ip = st.text_input("Primary Internal IP", value=vm.get('network_ip', ''), key=f"vm_nip_{i}")
+                                new_ext_tier = st.selectbox("External IP Tier", ["", "PREMIUM", "STANDARD"], index=["", "PREMIUM", "STANDARD"].index(vm.get('external_network_tier', "") or ""), key=f"vm_eip_tier_{i}")
+                            with c3:
+                                new_assign_eip = st.checkbox("Assign External IPv4", value=vm.get('assign_external_ip', vm.get('create_public_ip', False)), key=f"vm_eip_{i}")
+                                new_allow_stop = st.checkbox("Allow Stop for Update", value=vm.get('allow_stopping_for_update', True), key=f"vm_allow_stop_{i}")
+                                new_can_ip_forward = st.checkbox("Can IP Forward", value=vm.get('can_ip_forward', False), key=f"vm_ipf_{i}")
+                                new_del_prot = st.checkbox("Deletion Protection", value=vm.get('deletion_protection', False), key=f"vm_delprot_{i}")
+                                new_enable_display = st.checkbox("Enable Display Device", value=vm.get('enable_display', False), key=f"vm_display_{i}")
+
+                            c4, c5, c6 = st.columns(3)
+                            with c4:
+                                new_boot_size = st.number_input("Boot Disk Size (GB)", min_value=10, value=int(vm.get('boot_disk_size_gb') or 10), key=f"vm_bsize_{i}")
+                                new_boot_type = st.selectbox("Boot Disk Type", ["", "pd-standard", "pd-balanced", "pd-ssd"], index=["", "pd-standard", "pd-balanced", "pd-ssd"].index(vm.get('boot_disk_type', "") or ""), key=f"vm_btype_{i}")
+                                new_boot_auto = st.checkbox("Boot Disk Auto Delete", value=vm.get('boot_disk_auto_delete', True), key=f"vm_bauto_{i}")
+                            with c5:
+                                new_sa_email = st.text_input("Service Account Email", value=vm.get('service_account_email', ''), key=f"vm_sa_{i}")
+                                new_sa_scopes = st.text_area("Service Account Scopes (comma-separated)", value=", ".join(vm.get('service_account_scopes', ["https://www.googleapis.com/auth/cloud-platform"])) , key=f"vm_scopes_{i}")
+                                new_tags = st.text_input("Tags (comma-separated)", value=", ".join(vm.get('tags', [])), key=f"vm_tags_{i}")
+                            with c6:
+                                new_preempt = st.checkbox("Preemptible / Spot", value=vm.get('scheduling_preemptible', False), key=f"vm_preempt_{i}")
+                                new_auto_restart = st.checkbox("Automatic Restart", value=vm.get('scheduling_automatic_restart', True), key=f"vm_autorst_{i}")
+                                new_ohm = st.selectbox("On Host Maintenance", ["", "MIGRATE", "TERMINATE"], index=["", "MIGRATE", "TERMINATE"].index(vm.get('scheduling_on_host_maintenance', "") or ""), key=f"vm_ohm_{i}")
+                                new_prov_model = st.selectbox("Provisioning Model", ["", "STANDARD", "SPOT"], index=["", "STANDARD", "SPOT"].index(vm.get('scheduling_provisioning_model', "") or ""), key=f"vm_prov_{i}")
+
+                            c7, c8 = st.columns(2)
+                            with c7:
+                                new_enable_shielded = st.checkbox("Enable Shielded VM", value=vm.get('enable_shielded_vm', False), key=f"vm_shielded_{i}")
+                                new_sh_secure = st.checkbox("Shielded Secure Boot", value=vm.get('shielded_secure_boot', False), key=f"vm_shs_{i}")
+                                new_sh_vtpm = st.checkbox("Shielded vTPM", value=vm.get('shielded_vtpm', True), key=f"vm_shv_{i}")
+                                new_sh_integrity = st.checkbox("Shielded Integrity Monitoring", value=vm.get('shielded_integrity_monitoring', True), key=f"vm_shi_{i}")
+                            with c8:
+                                new_enable_conf = st.checkbox("Enable Confidential Compute", value=vm.get('enable_confidential_compute', False), key=f"vm_conf_{i}")
+                                new_conf_type = st.selectbox("Confidential Type", ["", "SEV", "SEV_SNP", "TDX"], index=["", "SEV", "SEV_SNP", "TDX"].index(vm.get('confidential_instance_type', "") or ""), key=f"vm_conf_type_{i}")
+
+                            # JSON-like inputs
+                            adv1, adv2, adv3 = st.columns(3)
+                            with adv1:
+                                new_labels_str = st.text_area("Labels (JSON)", value=json.dumps(vm.get('labels', {}), indent=2), key=f"vm_labels_{i}")
+                            with adv2:
+                                new_metadata_str = st.text_area("Metadata (JSON)", value=json.dumps(vm.get('metadata', {}), indent=2), key=f"vm_meta_{i}")
+                            with adv3:
+                                new_boot_labels_str = st.text_area("Boot Disk Labels (JSON)", value=json.dumps(vm.get('boot_disk_labels', {}), indent=2), key=f"vm_blabels_{i}")
+
+                            # Startup script
+                            new_startup = st.text_area("Startup Script", value=vm.get('metadata_startup_script', ''), key=f"vm_startup_{i}")
+
+                            # Guest accelerators as JSON list
+                            new_gpus_str = st.text_area("Guest Accelerators (JSON list)", value=json.dumps(vm.get('guest_accelerators', []), indent=2), key=f"vm_gpus_{i}")
+
+                            # Parse and save advanced fields back
+                            def parse_json_or(default_val, s):
+                                try:
+                                    return json.loads(s) if s else default_val
+                                except Exception:
+                                    return default_val
+
+                            st.session_state.compute_instances[i]['image'] = new_image
+                            st.session_state.compute_instances[i]['description'] = new_description or None
+                            st.session_state.compute_instances[i]['hostname'] = new_hostname or None
+                            st.session_state.compute_instances[i]['min_cpu_platform'] = new_min_cpu or None
+                            st.session_state.compute_instances[i]['network'] = new_network or None
+                            st.session_state.compute_instances[i]['subnetwork'] = new_subnet or None
+                            st.session_state.compute_instances[i]['network_ip'] = new_network_ip or None
+                            st.session_state.compute_instances[i]['external_network_tier'] = new_ext_tier or None
+                            st.session_state.compute_instances[i]['assign_external_ip'] = bool(new_assign_eip)
+                            st.session_state.compute_instances[i]['allow_stopping_for_update'] = bool(new_allow_stop)
+                            st.session_state.compute_instances[i]['can_ip_forward'] = bool(new_can_ip_forward)
+                            st.session_state.compute_instances[i]['deletion_protection'] = bool(new_del_prot)
+                            st.session_state.compute_instances[i]['enable_display'] = bool(new_enable_display)
+                            st.session_state.compute_instances[i]['boot_disk_size_gb'] = int(new_boot_size) if new_boot_size else None
+                            st.session_state.compute_instances[i]['boot_disk_type'] = new_boot_type or None
+                            st.session_state.compute_instances[i]['boot_disk_auto_delete'] = bool(new_boot_auto)
+                            st.session_state.compute_instances[i]['service_account_email'] = new_sa_email or None
+                            st.session_state.compute_instances[i]['service_account_scopes'] = [s.strip() for s in (new_sa_scopes or '').split(',') if s.strip()] or ["https://www.googleapis.com/auth/cloud-platform"]
+                            st.session_state.compute_instances[i]['tags'] = [t.strip() for t in (new_tags or '').split(',') if t.strip()]
+                            st.session_state.compute_instances[i]['scheduling_preemptible'] = bool(new_preempt)
+                            st.session_state.compute_instances[i]['scheduling_automatic_restart'] = bool(new_auto_restart)
+                            st.session_state.compute_instances[i]['scheduling_on_host_maintenance'] = new_ohm or None
+                            st.session_state.compute_instances[i]['scheduling_provisioning_model'] = new_prov_model or None
+                            st.session_state.compute_instances[i]['enable_shielded_vm'] = bool(new_enable_shielded)
+                            st.session_state.compute_instances[i]['shielded_secure_boot'] = bool(new_sh_secure)
+                            st.session_state.compute_instances[i]['shielded_vtpm'] = bool(new_sh_vtpm)
+                            st.session_state.compute_instances[i]['shielded_integrity_monitoring'] = bool(new_sh_integrity)
+                            st.session_state.compute_instances[i]['enable_confidential_compute'] = bool(new_enable_conf)
+                            st.session_state.compute_instances[i]['confidential_instance_type'] = new_conf_type or None
+                            st.session_state.compute_instances[i]['labels'] = parse_json_or({}, new_labels_str)
+                            st.session_state.compute_instances[i]['metadata'] = parse_json_or({}, new_metadata_str)
+                            st.session_state.compute_instances[i]['boot_disk_labels'] = parse_json_or({}, new_boot_labels_str)
+                            st.session_state.compute_instances[i]['metadata_startup_script'] = new_startup or None
+                            st.session_state.compute_instances[i]['guest_accelerators'] = parse_json_or([], new_gpus_str)
+
+                            # Cost estimate (live)
+                            estimate = estimate_vm_cost_monthly(st.session_state.compute_instances[i])
+                            st.markdown("**Monthly estimate**")
+                            st.markdown(f"${estimate['total']:.2f}")
+                            st.caption(f"That's about ${estimate['hourly_compute']:.2f} hourly (compute only)")
+                            with st.expander("View breakdown", expanded=False):
+                                st.markdown("Item | Monthly estimate")
+                                st.markdown("--- | ---")
+                                st.markdown(f"{int(estimate['vcpu']) if estimate['vcpu'].is_integer() else estimate['vcpu']} vCPU + {int(estimate['mem_gb']) if estimate['mem_gb'].is_integer() else estimate['mem_gb']} GB memory | ${estimate['monthly_compute']:.2f}")
+                                st.markdown(f"{int(st.session_state.compute_instances[i].get('boot_disk_size_gb') or 10)} GB {st.session_state.compute_instances[i].get('boot_disk_type') or 'pd-balanced'} persistent disk | ${estimate['disk_month']:.2f}")
+                                st.markdown("Logging | Cost varies")
+                                st.markdown("Monitoring | Cost varies")
+                                st.markdown("Snapshot schedule | Cost varies")
+
+                        # Basic fields update
+                        if (new_name != vm.get('name') or new_zone != vm.get('zone') or new_type != vm.get('machine_type') or new_region != vm.get('region')):
+                            st.session_state.compute_instances[i]['name'] = new_name
+                            st.session_state.compute_instances[i]['region'] = new_region
+                            st.session_state.compute_instances[i]['zone'] = new_zone
+                            st.session_state.compute_instances[i]['machine_type'] = new_type
+
+            # Add new instance
+            st.markdown("**Add New Compute Instance:**")
+            # Region/Zone for new instances
+            regions = ["us-central1", "us-west1", "europe-west1", "asia-south1"]
+            region_to_zones = {
+                "us-central1": ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"],
+                "us-west1": ["us-west1-a", "us-west1-b", "us-west1-c"],
+                "europe-west1": ["europe-west1-b", "europe-west1-c", "europe-west1-d"],
+                "asia-south1": ["asia-south1-a", "asia-south1-b", "asia-south1-c"],
+            }
+
+            col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
+            with col1:
+                vm_name = st.text_input("VM Name", value="my-vm", key="new_vm_name")
+            with col2:
+                new_vm_region = st.selectbox("Region", regions, index=0, key="new_vm_region")
+            with col3:
+                # Zone based on region
+                zones_list = region_to_zones.get(new_vm_region, region_to_zones[regions[0]])
+                vm_zone = st.selectbox("Zone", zones_list, index=0, key="new_vm_zone")
+            with col4:
+                # Machine type selection lives in Advanced Options below
+                if 'new_vm_machine_type' not in st.session_state:
+                        st.session_state.new_vm_machine_type = "e2-standard-2"
+                st.markdown(f"**Machine type**: `{st.session_state.new_vm_machine_type}`")
+                if st.button("Change machine type", key="new_vm_change_type"):
+                        st.session_state["open_new_vm_adv"] = True
+                        # Don't rerun here - let the UI update naturally
+            with col5:
+                add_clicked = st.button("➕ Add", key="add_vm")
+
+            with st.expander("🔧 Advanced Options for New VM", expanded=st.session_state.get("open_new_vm_adv", False)):
+                nc1, nc2, nc3 = st.columns(3)
+                with nc1:
+                        vm_image = st.text_input("Boot Image", value="debian-cloud/debian-11", key="new_vm_image")
+                        vm_description = st.text_input("Description", value="", key="new_vm_desc")
+                        vm_hostname = st.text_input("Hostname (FQDN)", value="", key="new_vm_host")
+                        vm_min_cpu = st.text_input("Min CPU Platform", value="", key="new_vm_min_cpu")
+                with nc2:
+                        vm_network = st.text_input("Network (name/self_link)", value="", key="new_vm_net")
+                        vm_subnet = st.text_input("Subnetwork (name/self_link)", value="", key="new_vm_sub")
+                        vm_network_ip = st.text_input("Primary Internal IP", value="", key="new_vm_nip")
+                        vm_ext_tier = st.selectbox("External IP Tier", ["", "PREMIUM", "STANDARD"], key="new_vm_eip_tier")
+                with nc3:
+                        vm_assign_eip = st.checkbox("Assign External IPv4", value=False, key="new_vm_eip")
+                        vm_allow_stop = st.checkbox("Allow Stop for Update", value=True, key="new_vm_allow_stop")
+                        vm_can_ip_forward = st.checkbox("Can IP Forward", value=False, key="new_vm_ipf")
+                        vm_del_prot = st.checkbox("Deletion Protection", value=False, key="new_vm_delprot")
+                        vm_enable_display = st.checkbox("Enable Display Device", value=False, key="new_vm_display")
+
+                nb1, nb2, nb3 = st.columns(3)
+                with nb1:
+                        vm_boot_size = st.number_input("Boot Disk Size (GB)", min_value=10, value=10, key="new_vm_bsize")
+                        vm_boot_type = st.selectbox("Boot Disk Type", ["", "pd-standard", "pd-balanced", "pd-ssd"], key="new_vm_btype")
+                        vm_boot_auto = st.checkbox("Boot Disk Auto Delete", value=True, key="new_vm_bauto")
+                with nb2:
+                        vm_sa_email = st.text_input("Service Account Email", value="", key="new_vm_sa")
+                        vm_sa_scopes = st.text_area("Service Account Scopes (comma-separated)", value="https://www.googleapis.com/auth/cloud-platform", key="new_vm_scopes")
+                        vm_tags = st.text_input("Tags (comma-separated)", value="", key="new_vm_tags")
+                with nb3:
+                        vm_preempt = st.checkbox("Preemptible / Spot", value=False, key="new_vm_preempt")
+                        vm_auto_restart = st.checkbox("Automatic Restart", value=True, key="new_vm_autorst")
+                        vm_ohm = st.selectbox("On Host Maintenance", ["", "MIGRATE", "TERMINATE"], key="new_vm_ohm")
+                        vm_prov_model = st.selectbox("Provisioning Model", ["", "STANDARD", "SPOT"], key="new_vm_prov")
+
+                nb4, nb5 = st.columns(2)
+                with nb4:
+                        vm_enable_shielded = st.checkbox("Enable Shielded VM", value=False, key="new_vm_shielded")
+                        vm_sh_secure = st.checkbox("Shielded Secure Boot", value=False, key="new_vm_shs")
+                        vm_sh_vtpm = st.checkbox("Shielded vTPM", value=True, key="new_vm_shv")
+                        vm_sh_integrity = st.checkbox("Shielded Integrity Monitoring", value=True, key="new_vm_shi")
+                with nb5:
+                        vm_enable_conf = st.checkbox("Enable Confidential Compute", value=False, key="new_vm_conf")
+                        vm_conf_type = st.selectbox("Confidential Type", ["", "SEV", "SEV_SNP", "TDX"], key="new_vm_conf_type")
+
+                # JSON inputs
+                nja, njb, njc = st.columns(3)
+                with nja:
+                        vm_labels_str = st.text_area("Labels (JSON)", value="{}", key="new_vm_labels")
+                with njb:
+                        vm_metadata_str = st.text_area("Metadata (JSON)", value="{}", key="new_vm_metadata")
+                with njc:
+                        vm_boot_labels_str = st.text_area("Boot Disk Labels (JSON)", value="{}", key="new_vm_blabels")
+
+                vm_startup = st.text_area("Startup Script", value="", key="new_vm_startup")
+                vm_gpus_str = st.text_area("Guest Accelerators (JSON list)", value="[]", key="new_vm_gpus")
+
+                # Live estimate for new VM
+                tmp_vm = {
+                        "machine_type": st.session_state.new_vm_machine_type,
+                        "boot_disk_size_gb": vm_boot_size,
+                        "boot_disk_type": vm_boot_type or "pd-balanced",
+                }
+                est_new = estimate_vm_cost_monthly(tmp_vm)
+                st.markdown("**Monthly estimate**")
+                st.markdown(f"${est_new['total']:.2f}")
+                st.caption(f"That's about ${est_new['hourly_compute']:.2f} hourly (compute only)")
+                with st.expander("View breakdown", expanded=False):
+                        st.markdown("Item | Monthly estimate")
+                        st.markdown("--- | ---")
+                        st.markdown(f"{int(est_new['vcpu']) if est_new['vcpu'].is_integer() else est_new['vcpu']} vCPU + {int(est_new['mem_gb']) if est_new['mem_gb'].is_integer() else est_new['mem_gb']} GB memory | ${est_new['monthly_compute']:.2f}")
+                        st.markdown(f"{int(vm_boot_size)} GB {vm_boot_type or 'pd-balanced'} persistent disk | ${est_new['disk_month']:.2f}")
+                        st.markdown("Logging | Cost varies")
+                        st.markdown("Monitoring | Cost varies")
+                        st.markdown("Snapshot schedule | Cost varies")
+
+                # Machine Type Selection
+                st.markdown("**Machine Type Selection**")
+                tabs = st.tabs(["General purpose", "Compute optimized", "Memory optimized", "Storage optimized", "GPUs"])
+                with tabs[0]:
                         # Machine Series Selection Table
                         st.markdown("**Select Machine Series:**")
                         series_data = get_machine_series_data()
@@ -2921,56 +3526,57 @@ def project_builder():
                             use_container_width=True,
                             hide_index=True,
                             on_select="rerun",
-                            selection_mode="single-row"
+                            selection_mode="single-row",
+                            key="new_vm_series_table"
                         )
-                        
+                    
                         # Get selected series
                         selected_series = "E2"  # Default
                         if df.selection.rows:
                             selected_series = series_data[df.selection.rows[0]]["Series"]
-                        
+                    
                         # Update session state if series changed
-                        if f"selected_series_{i}" not in st.session_state:
-                            st.session_state[f"selected_series_{i}"] = selected_series
-                        elif st.session_state[f"selected_series_{i}"] != selected_series:
-                            st.session_state[f"selected_series_{i}"] = selected_series
+                        if "new_vm_selected_series" not in st.session_state:
+                            st.session_state["new_vm_selected_series"] = selected_series
+                        elif st.session_state["new_vm_selected_series"] != selected_series:
+                            st.session_state["new_vm_selected_series"] = selected_series
                             # Don't rerun here - let the UI update naturally
-                        
+                    
                         st.markdown(f"**Selected Series: {selected_series}**")
-                        
+                    
                         # Get presets for selected series
                         series_presets = get_series_presets(selected_series)
-                        
+                    
                         # Check if series supports custom machine types
                         custom_enabled_series = ["N4", "E2", "N2", "N2D", "N1"]
                         supports_custom = selected_series in custom_enabled_series
-                        
+                    
                         # Create tabs based on series support
                         if supports_custom:
                             sub_tabs = st.tabs(["Preset", "Custom"])
                         else:
                             sub_tabs = st.tabs(["Preset"])
-                            
+                        
                         with sub_tabs[0]:
                             if series_presets:
                                 families = list(series_presets.keys())
-                                fam = st.radio("Instance sizes", families, horizontal=True, key=f"vm_family_{i}")
-                                
+                                fam = st.radio("Instance sizes", families, horizontal=True, key="new_vm_family")
+                            
                                 if fam in series_presets:
                                     opts = [f"{name} – {desc}" for name, desc in series_presets[fam]]
-                                    sel_opt = st.selectbox("Machine Type", opts, index=0, key=f"vm_opt_{i}")
+                                    sel_opt = st.selectbox("Machine Type", opts, index=0, key="new_vm_opt")
                                     chosen_mt = series_presets[fam][opts.index(sel_opt)][0]
-                                    
-                                    if chosen_mt != st.session_state.compute_instances[i].get('machine_type'):
-                                        st.session_state.compute_instances[i]['machine_type'] = chosen_mt
+                                
+                                    if chosen_mt != st.session_state.new_vm_machine_type:
+                                        st.session_state.new_vm_machine_type = chosen_mt
                                         # Don't rerun here - let the UI update naturally
                             else:
                                 st.info(f"No presets available for {selected_series} series.")
-                                
+                            
                         if supports_custom:
                             with sub_tabs[1]:
                                 st.warning("⚠️ Creating a custom machine incurs additional costs")
-                                
+                            
                                 col1, col2 = st.columns(2)
                                 with col1:
                                     custom_vcpu = st.slider(
@@ -2978,7 +3584,7 @@ def project_builder():
                                         min_value=1, 
                                         max_value=96, 
                                         value=2, 
-                                        key=f"custom_vcpu_{i}",
+                                        key="new_custom_vcpu",
                                         help="Number of vCPUs"
                                     )
                                 with col2:
@@ -2988,17 +3594,17 @@ def project_builder():
                                         max_value=6.5, 
                                         value=1.0, 
                                         step=0.1, 
-                                        key=f"custom_memory_{i}",
+                                        key="new_custom_memory",
                                         help="Memory in GB"
                                     )
-                                
+                            
                                 extend_memory = st.checkbox(
                                     "Extend Memory", 
                                     value=False, 
-                                    key=f"extend_memory_{i}",
+                                    key="new_extend_memory",
                                     help="Allow memory to exceed 6.5 GB per vCPU"
                                 )
-                                
+                            
                                 if extend_memory:
                                     max_memory = min(6.5 * custom_vcpu, 624.0)  # Max 624 GB for N1
                                     custom_memory = st.slider(
@@ -3007,1006 +3613,1078 @@ def project_builder():
                                         max_value=max_memory, 
                                         value=custom_memory, 
                                         step=0.1, 
-                                        key=f"extended_memory_{i}",
+                                        key="new_extended_memory",
                                         help=f"Extended memory up to {max_memory:.1f} GB"
                                     )
-                                
+                            
                                 # Generate custom machine type name
                                 custom_mt = f"custom-{selected_series.lower()}-{custom_vcpu}-{int(custom_memory * 1024)}"
-                                
-                                if custom_mt != st.session_state.compute_instances[i].get('machine_type'):
-                                    st.session_state.compute_instances[i]['machine_type'] = custom_mt
-                                    # Don't rerun here - let the UI update naturally
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        new_image = st.text_input("Boot Image", value=vm.get('image', 'debian-cloud/debian-11'), key=f"vm_image_{i}")
-                        new_description = st.text_input("Description", value=vm.get('description', ''), key=f"vm_desc_{i}")
-                        new_hostname = st.text_input("Hostname (FQDN)", value=vm.get('hostname', ''), key=f"vm_host_{i}")
-                        new_min_cpu = st.text_input("Min CPU Platform", value=vm.get('min_cpu_platform', ''), key=f"vm_min_cpu_{i}")
-                    with c2:
-                        new_network = st.text_input("Network (name/self_link)", value=vm.get('network', ''), key=f"vm_net_{i}")
-                        new_subnet = st.text_input("Subnetwork (name/self_link)", value=vm.get('subnetwork', ''), key=f"vm_sub_{i}")
-                        new_network_ip = st.text_input("Primary Internal IP", value=vm.get('network_ip', ''), key=f"vm_nip_{i}")
-                        new_ext_tier = st.selectbox("External IP Tier", ["", "PREMIUM", "STANDARD"], index=["", "PREMIUM", "STANDARD"].index(vm.get('external_network_tier', "") or ""), key=f"vm_eip_tier_{i}")
-                    with c3:
-                        new_assign_eip = st.checkbox("Assign External IPv4", value=vm.get('assign_external_ip', vm.get('create_public_ip', False)), key=f"vm_eip_{i}")
-                        new_allow_stop = st.checkbox("Allow Stop for Update", value=vm.get('allow_stopping_for_update', True), key=f"vm_allow_stop_{i}")
-                        new_can_ip_forward = st.checkbox("Can IP Forward", value=vm.get('can_ip_forward', False), key=f"vm_ipf_{i}")
-                        new_del_prot = st.checkbox("Deletion Protection", value=vm.get('deletion_protection', False), key=f"vm_delprot_{i}")
-                        new_enable_display = st.checkbox("Enable Display Device", value=vm.get('enable_display', False), key=f"vm_display_{i}")
-
-                    c4, c5, c6 = st.columns(3)
-                    with c4:
-                        new_boot_size = st.number_input("Boot Disk Size (GB)", min_value=10, value=int(vm.get('boot_disk_size_gb') or 10), key=f"vm_bsize_{i}")
-                        new_boot_type = st.selectbox("Boot Disk Type", ["", "pd-standard", "pd-balanced", "pd-ssd"], index=["", "pd-standard", "pd-balanced", "pd-ssd"].index(vm.get('boot_disk_type', "") or ""), key=f"vm_btype_{i}")
-                        new_boot_auto = st.checkbox("Boot Disk Auto Delete", value=vm.get('boot_disk_auto_delete', True), key=f"vm_bauto_{i}")
-                    with c5:
-                        new_sa_email = st.text_input("Service Account Email", value=vm.get('service_account_email', ''), key=f"vm_sa_{i}")
-                        new_sa_scopes = st.text_area("Service Account Scopes (comma-separated)", value=", ".join(vm.get('service_account_scopes', ["https://www.googleapis.com/auth/cloud-platform"])) , key=f"vm_scopes_{i}")
-                        new_tags = st.text_input("Tags (comma-separated)", value=", ".join(vm.get('tags', [])), key=f"vm_tags_{i}")
-                    with c6:
-                        new_preempt = st.checkbox("Preemptible / Spot", value=vm.get('scheduling_preemptible', False), key=f"vm_preempt_{i}")
-                        new_auto_restart = st.checkbox("Automatic Restart", value=vm.get('scheduling_automatic_restart', True), key=f"vm_autorst_{i}")
-                        new_ohm = st.selectbox("On Host Maintenance", ["", "MIGRATE", "TERMINATE"], index=["", "MIGRATE", "TERMINATE"].index(vm.get('scheduling_on_host_maintenance', "") or ""), key=f"vm_ohm_{i}")
-                        new_prov_model = st.selectbox("Provisioning Model", ["", "STANDARD", "SPOT"], index=["", "STANDARD", "SPOT"].index(vm.get('scheduling_provisioning_model', "") or ""), key=f"vm_prov_{i}")
-
-                    c7, c8 = st.columns(2)
-                    with c7:
-                        new_enable_shielded = st.checkbox("Enable Shielded VM", value=vm.get('enable_shielded_vm', False), key=f"vm_shielded_{i}")
-                        new_sh_secure = st.checkbox("Shielded Secure Boot", value=vm.get('shielded_secure_boot', False), key=f"vm_shs_{i}")
-                        new_sh_vtpm = st.checkbox("Shielded vTPM", value=vm.get('shielded_vtpm', True), key=f"vm_shv_{i}")
-                        new_sh_integrity = st.checkbox("Shielded Integrity Monitoring", value=vm.get('shielded_integrity_monitoring', True), key=f"vm_shi_{i}")
-                    with c8:
-                        new_enable_conf = st.checkbox("Enable Confidential Compute", value=vm.get('enable_confidential_compute', False), key=f"vm_conf_{i}")
-                        new_conf_type = st.selectbox("Confidential Type", ["", "SEV", "SEV_SNP", "TDX"], index=["", "SEV", "SEV_SNP", "TDX"].index(vm.get('confidential_instance_type', "") or ""), key=f"vm_conf_type_{i}")
-
-                    # JSON-like inputs
-                    adv1, adv2, adv3 = st.columns(3)
-                    with adv1:
-                        new_labels_str = st.text_area("Labels (JSON)", value=json.dumps(vm.get('labels', {}), indent=2), key=f"vm_labels_{i}")
-                    with adv2:
-                        new_metadata_str = st.text_area("Metadata (JSON)", value=json.dumps(vm.get('metadata', {}), indent=2), key=f"vm_meta_{i}")
-                    with adv3:
-                        new_boot_labels_str = st.text_area("Boot Disk Labels (JSON)", value=json.dumps(vm.get('boot_disk_labels', {}), indent=2), key=f"vm_blabels_{i}")
-
-                    # Startup script
-                    new_startup = st.text_area("Startup Script", value=vm.get('metadata_startup_script', ''), key=f"vm_startup_{i}")
-
-                    # Guest accelerators as JSON list
-                    new_gpus_str = st.text_area("Guest Accelerators (JSON list)", value=json.dumps(vm.get('guest_accelerators', []), indent=2), key=f"vm_gpus_{i}")
-
-                    # Parse and save advanced fields back
-                    def parse_json_or(default_val, s):
-                        try:
-                            return json.loads(s) if s else default_val
-                        except Exception:
-                            return default_val
-
-                    st.session_state.compute_instances[i]['image'] = new_image
-                    st.session_state.compute_instances[i]['description'] = new_description or None
-                    st.session_state.compute_instances[i]['hostname'] = new_hostname or None
-                    st.session_state.compute_instances[i]['min_cpu_platform'] = new_min_cpu or None
-                    st.session_state.compute_instances[i]['network'] = new_network or None
-                    st.session_state.compute_instances[i]['subnetwork'] = new_subnet or None
-                    st.session_state.compute_instances[i]['network_ip'] = new_network_ip or None
-                    st.session_state.compute_instances[i]['external_network_tier'] = new_ext_tier or None
-                    st.session_state.compute_instances[i]['assign_external_ip'] = bool(new_assign_eip)
-                    st.session_state.compute_instances[i]['allow_stopping_for_update'] = bool(new_allow_stop)
-                    st.session_state.compute_instances[i]['can_ip_forward'] = bool(new_can_ip_forward)
-                    st.session_state.compute_instances[i]['deletion_protection'] = bool(new_del_prot)
-                    st.session_state.compute_instances[i]['enable_display'] = bool(new_enable_display)
-                    st.session_state.compute_instances[i]['boot_disk_size_gb'] = int(new_boot_size) if new_boot_size else None
-                    st.session_state.compute_instances[i]['boot_disk_type'] = new_boot_type or None
-                    st.session_state.compute_instances[i]['boot_disk_auto_delete'] = bool(new_boot_auto)
-                    st.session_state.compute_instances[i]['service_account_email'] = new_sa_email or None
-                    st.session_state.compute_instances[i]['service_account_scopes'] = [s.strip() for s in (new_sa_scopes or '').split(',') if s.strip()] or ["https://www.googleapis.com/auth/cloud-platform"]
-                    st.session_state.compute_instances[i]['tags'] = [t.strip() for t in (new_tags or '').split(',') if t.strip()]
-                    st.session_state.compute_instances[i]['scheduling_preemptible'] = bool(new_preempt)
-                    st.session_state.compute_instances[i]['scheduling_automatic_restart'] = bool(new_auto_restart)
-                    st.session_state.compute_instances[i]['scheduling_on_host_maintenance'] = new_ohm or None
-                    st.session_state.compute_instances[i]['scheduling_provisioning_model'] = new_prov_model or None
-                    st.session_state.compute_instances[i]['enable_shielded_vm'] = bool(new_enable_shielded)
-                    st.session_state.compute_instances[i]['shielded_secure_boot'] = bool(new_sh_secure)
-                    st.session_state.compute_instances[i]['shielded_vtpm'] = bool(new_sh_vtpm)
-                    st.session_state.compute_instances[i]['shielded_integrity_monitoring'] = bool(new_sh_integrity)
-                    st.session_state.compute_instances[i]['enable_confidential_compute'] = bool(new_enable_conf)
-                    st.session_state.compute_instances[i]['confidential_instance_type'] = new_conf_type or None
-                    st.session_state.compute_instances[i]['labels'] = parse_json_or({}, new_labels_str)
-                    st.session_state.compute_instances[i]['metadata'] = parse_json_or({}, new_metadata_str)
-                    st.session_state.compute_instances[i]['boot_disk_labels'] = parse_json_or({}, new_boot_labels_str)
-                    st.session_state.compute_instances[i]['metadata_startup_script'] = new_startup or None
-                    st.session_state.compute_instances[i]['guest_accelerators'] = parse_json_or([], new_gpus_str)
-
-                    # Cost estimate (live)
-                    estimate = estimate_vm_cost_monthly(st.session_state.compute_instances[i])
-                    st.markdown("**Monthly estimate**")
-                    st.markdown(f"${estimate['total']:.2f}")
-                    st.caption(f"That's about ${estimate['hourly_compute']:.2f} hourly (compute only)")
-                    with st.expander("View breakdown", expanded=False):
-                        st.markdown("Item | Monthly estimate")
-                        st.markdown("--- | ---")
-                        st.markdown(f"{int(estimate['vcpu']) if estimate['vcpu'].is_integer() else estimate['vcpu']} vCPU + {int(estimate['mem_gb']) if estimate['mem_gb'].is_integer() else estimate['mem_gb']} GB memory | ${estimate['monthly_compute']:.2f}")
-                        st.markdown(f"{int(st.session_state.compute_instances[i].get('boot_disk_size_gb') or 10)} GB {st.session_state.compute_instances[i].get('boot_disk_type') or 'pd-balanced'} persistent disk | ${estimate['disk_month']:.2f}")
-                        st.markdown("Logging | Cost varies")
-                        st.markdown("Monitoring | Cost varies")
-                        st.markdown("Snapshot schedule | Cost varies")
-
-                # Basic fields update
-                if (new_name != vm.get('name') or new_zone != vm.get('zone') or new_type != vm.get('machine_type') or new_region != vm.get('region')):
-                    st.session_state.compute_instances[i]['name'] = new_name
-                    st.session_state.compute_instances[i]['region'] = new_region
-                    st.session_state.compute_instances[i]['zone'] = new_zone
-                    st.session_state.compute_instances[i]['machine_type'] = new_type
-
-        # Add new instance
-        st.markdown("**Add New Compute Instance:**")
-        # Region/Zone for new instances
-        regions = ["us-central1", "us-west1", "europe-west1", "asia-south1"]
-        region_to_zones = {
-            "us-central1": ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"],
-            "us-west1": ["us-west1-a", "us-west1-b", "us-west1-c"],
-            "europe-west1": ["europe-west1-b", "europe-west1-c", "europe-west1-d"],
-            "asia-south1": ["asia-south1-a", "asia-south1-b", "asia-south1-c"],
-        }
-
-        col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1])
-        with col1:
-            vm_name = st.text_input("VM Name", value="my-vm", key="new_vm_name")
-        with col2:
-            new_vm_region = st.selectbox("Region", regions, index=0, key="new_vm_region")
-        with col3:
-            # Zone based on region
-            zones_list = region_to_zones.get(new_vm_region, region_to_zones[regions[0]])
-            vm_zone = st.selectbox("Zone", zones_list, index=0, key="new_vm_zone")
-        with col4:
-            # Machine type selection lives in Advanced Options below
-            if 'new_vm_machine_type' not in st.session_state:
-                st.session_state.new_vm_machine_type = "e2-standard-2"
-            st.markdown(f"**Machine type**: `{st.session_state.new_vm_machine_type}`")
-            if st.button("Change machine type", key="new_vm_change_type"):
-                st.session_state["open_new_vm_adv"] = True
-                # Don't rerun here - let the UI update naturally
-        with col5:
-            add_clicked = st.button("➕ Add", key="add_vm")
-
-        with st.expander("🔧 Advanced Options for New VM", expanded=st.session_state.get("open_new_vm_adv", False)):
-            nc1, nc2, nc3 = st.columns(3)
-            with nc1:
-                vm_image = st.text_input("Boot Image", value="debian-cloud/debian-11", key="new_vm_image")
-                vm_description = st.text_input("Description", value="", key="new_vm_desc")
-                vm_hostname = st.text_input("Hostname (FQDN)", value="", key="new_vm_host")
-                vm_min_cpu = st.text_input("Min CPU Platform", value="", key="new_vm_min_cpu")
-            with nc2:
-                vm_network = st.text_input("Network (name/self_link)", value="", key="new_vm_net")
-                vm_subnet = st.text_input("Subnetwork (name/self_link)", value="", key="new_vm_sub")
-                vm_network_ip = st.text_input("Primary Internal IP", value="", key="new_vm_nip")
-                vm_ext_tier = st.selectbox("External IP Tier", ["", "PREMIUM", "STANDARD"], key="new_vm_eip_tier")
-            with nc3:
-                vm_assign_eip = st.checkbox("Assign External IPv4", value=False, key="new_vm_eip")
-                vm_allow_stop = st.checkbox("Allow Stop for Update", value=True, key="new_vm_allow_stop")
-                vm_can_ip_forward = st.checkbox("Can IP Forward", value=False, key="new_vm_ipf")
-                vm_del_prot = st.checkbox("Deletion Protection", value=False, key="new_vm_delprot")
-                vm_enable_display = st.checkbox("Enable Display Device", value=False, key="new_vm_display")
-
-            nb1, nb2, nb3 = st.columns(3)
-            with nb1:
-                vm_boot_size = st.number_input("Boot Disk Size (GB)", min_value=10, value=10, key="new_vm_bsize")
-                vm_boot_type = st.selectbox("Boot Disk Type", ["", "pd-standard", "pd-balanced", "pd-ssd"], key="new_vm_btype")
-                vm_boot_auto = st.checkbox("Boot Disk Auto Delete", value=True, key="new_vm_bauto")
-            with nb2:
-                vm_sa_email = st.text_input("Service Account Email", value="", key="new_vm_sa")
-                vm_sa_scopes = st.text_area("Service Account Scopes (comma-separated)", value="https://www.googleapis.com/auth/cloud-platform", key="new_vm_scopes")
-                vm_tags = st.text_input("Tags (comma-separated)", value="", key="new_vm_tags")
-            with nb3:
-                vm_preempt = st.checkbox("Preemptible / Spot", value=False, key="new_vm_preempt")
-                vm_auto_restart = st.checkbox("Automatic Restart", value=True, key="new_vm_autorst")
-                vm_ohm = st.selectbox("On Host Maintenance", ["", "MIGRATE", "TERMINATE"], key="new_vm_ohm")
-                vm_prov_model = st.selectbox("Provisioning Model", ["", "STANDARD", "SPOT"], key="new_vm_prov")
-
-            nb4, nb5 = st.columns(2)
-            with nb4:
-                vm_enable_shielded = st.checkbox("Enable Shielded VM", value=False, key="new_vm_shielded")
-                vm_sh_secure = st.checkbox("Shielded Secure Boot", value=False, key="new_vm_shs")
-                vm_sh_vtpm = st.checkbox("Shielded vTPM", value=True, key="new_vm_shv")
-                vm_sh_integrity = st.checkbox("Shielded Integrity Monitoring", value=True, key="new_vm_shi")
-            with nb5:
-                vm_enable_conf = st.checkbox("Enable Confidential Compute", value=False, key="new_vm_conf")
-                vm_conf_type = st.selectbox("Confidential Type", ["", "SEV", "SEV_SNP", "TDX"], key="new_vm_conf_type")
-
-            # JSON inputs
-            nja, njb, njc = st.columns(3)
-            with nja:
-                vm_labels_str = st.text_area("Labels (JSON)", value="{}", key="new_vm_labels")
-            with njb:
-                vm_metadata_str = st.text_area("Metadata (JSON)", value="{}", key="new_vm_metadata")
-            with njc:
-                vm_boot_labels_str = st.text_area("Boot Disk Labels (JSON)", value="{}", key="new_vm_blabels")
-
-            vm_startup = st.text_area("Startup Script", value="", key="new_vm_startup")
-            vm_gpus_str = st.text_area("Guest Accelerators (JSON list)", value="[]", key="new_vm_gpus")
-
-            # Live estimate for new VM
-            tmp_vm = {
-                "machine_type": st.session_state.new_vm_machine_type,
-                "boot_disk_size_gb": vm_boot_size,
-                "boot_disk_type": vm_boot_type or "pd-balanced",
-            }
-            est_new = estimate_vm_cost_monthly(tmp_vm)
-            st.markdown("**Monthly estimate**")
-            st.markdown(f"${est_new['total']:.2f}")
-            st.caption(f"That's about ${est_new['hourly_compute']:.2f} hourly (compute only)")
-            with st.expander("View breakdown", expanded=False):
-                st.markdown("Item | Monthly estimate")
-                st.markdown("--- | ---")
-                st.markdown(f"{int(est_new['vcpu']) if est_new['vcpu'].is_integer() else est_new['vcpu']} vCPU + {int(est_new['mem_gb']) if est_new['mem_gb'].is_integer() else est_new['mem_gb']} GB memory | ${est_new['monthly_compute']:.2f}")
-                st.markdown(f"{int(vm_boot_size)} GB {vm_boot_type or 'pd-balanced'} persistent disk | ${est_new['disk_month']:.2f}")
-                st.markdown("Logging | Cost varies")
-                st.markdown("Monitoring | Cost varies")
-                st.markdown("Snapshot schedule | Cost varies")
-
-            # Machine Type Selection
-            st.markdown("**Machine Type Selection**")
-            tabs = st.tabs(["General purpose", "Compute optimized", "Memory optimized", "Storage optimized", "GPUs"])
-            with tabs[0]:
-                # Machine Series Selection Table
-                st.markdown("**Select Machine Series:**")
-                series_data = get_machine_series_data()
-                df = st.dataframe(
-                    series_data,
-                    use_container_width=True,
-                    hide_index=True,
-                    on_select="rerun",
-                    selection_mode="single-row",
-                    key="new_vm_series_table"
-                )
-                
-                # Get selected series
-                selected_series = "E2"  # Default
-                if df.selection.rows:
-                    selected_series = series_data[df.selection.rows[0]]["Series"]
-                
-                # Update session state if series changed
-                if "new_vm_selected_series" not in st.session_state:
-                    st.session_state["new_vm_selected_series"] = selected_series
-                elif st.session_state["new_vm_selected_series"] != selected_series:
-                    st.session_state["new_vm_selected_series"] = selected_series
-                    # Don't rerun here - let the UI update naturally
-                
-                st.markdown(f"**Selected Series: {selected_series}**")
-                
-                # Get presets for selected series
-                series_presets = get_series_presets(selected_series)
-                
-                # Check if series supports custom machine types
-                custom_enabled_series = ["N4", "E2", "N2", "N2D", "N1"]
-                supports_custom = selected_series in custom_enabled_series
-                
-                # Create tabs based on series support
-                if supports_custom:
-                    sub_tabs = st.tabs(["Preset", "Custom"])
-                else:
-                    sub_tabs = st.tabs(["Preset"])
-                    
-                with sub_tabs[0]:
-                    if series_presets:
-                        families = list(series_presets.keys())
-                        fam = st.radio("Instance sizes", families, horizontal=True, key="new_vm_family")
-                        
-                        if fam in series_presets:
-                            opts = [f"{name} – {desc}" for name, desc in series_presets[fam]]
-                            sel_opt = st.selectbox("Machine Type", opts, index=0, key="new_vm_opt")
-                            chosen_mt = series_presets[fam][opts.index(sel_opt)][0]
                             
-                            if chosen_mt != st.session_state.new_vm_machine_type:
-                                st.session_state.new_vm_machine_type = chosen_mt
-                                # Don't rerun here - let the UI update naturally
-                    else:
-                        st.info(f"No presets available for {selected_series} series.")
-                        
-                if supports_custom:
-                    with sub_tabs[1]:
-                        st.warning("⚠️ Creating a custom machine incurs additional costs")
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            custom_vcpu = st.slider(
-                                "Cores", 
-                                min_value=1, 
-                                max_value=96, 
-                                value=2, 
-                                key="new_custom_vcpu",
-                                help="Number of vCPUs"
-                            )
-                        with col2:
-                            custom_memory = st.slider(
-                                "Memory (GB)", 
-                                min_value=1.0, 
-                                max_value=6.5, 
-                                value=1.0, 
-                                step=0.1, 
-                                key="new_custom_memory",
-                                help="Memory in GB"
-                            )
-                        
-                        extend_memory = st.checkbox(
-                            "Extend Memory", 
-                            value=False, 
-                            key="new_extend_memory",
-                            help="Allow memory to exceed 6.5 GB per vCPU"
-                        )
-                        
-                        if extend_memory:
-                            max_memory = min(6.5 * custom_vcpu, 624.0)  # Max 624 GB for N1
-                            custom_memory = st.slider(
-                                "Extended Memory (GB)", 
-                                min_value=1.0, 
-                                max_value=max_memory, 
-                                value=custom_memory, 
-                                step=0.1, 
-                                key="new_extended_memory",
-                                help=f"Extended memory up to {max_memory:.1f} GB"
-                            )
-                        
-                        # Generate custom machine type name
-                        custom_mt = f"custom-{selected_series.lower()}-{custom_vcpu}-{int(custom_memory * 1024)}"
-                        
-                        if custom_mt != st.session_state.new_vm_machine_type:
-                            st.session_state.new_vm_machine_type = custom_mt
-                            # Don't rerun here - let the UI update naturally
+                                if custom_mt != st.session_state.new_vm_machine_type:
+                                    st.session_state.new_vm_machine_type = custom_mt
+                                    # Don't rerun here - let the UI update naturally
 
-        if add_clicked and vm_name:
-            def parse_json_default(s, default):
-                try:
-                    return json.loads(s) if s else default
-                except Exception:
-                    return default
-            new_vm = {
-                "name": vm_name,
-                "region": new_vm_region,
-                "zone": vm_zone,
-                "machine_type": st.session_state.new_vm_machine_type,
-                "image": vm_image,
-                "description": vm_description or None,
-                "hostname": vm_hostname or None,
-                "min_cpu_platform": vm_min_cpu or None,
-                "network": vm_network or None,
-                "subnetwork": vm_subnet or None,
-                "network_ip": vm_network_ip or None,
-                "external_network_tier": vm_ext_tier or None,
-                "assign_external_ip": bool(vm_assign_eip),
-                "allow_stopping_for_update": bool(vm_allow_stop),
-                "can_ip_forward": bool(vm_can_ip_forward),
-                "deletion_protection": bool(vm_del_prot),
-                "enable_display": bool(vm_enable_display),
-                "boot_disk_size_gb": int(vm_boot_size) if vm_boot_size else None,
-                "boot_disk_type": vm_boot_type or None,
-                "boot_disk_auto_delete": bool(vm_boot_auto),
-                "service_account_email": vm_sa_email or None,
-                "service_account_scopes": [s.strip() for s in (vm_sa_scopes or '').split(',') if s.strip()] or ["https://www.googleapis.com/auth/cloud-platform"],
-                "tags": [t.strip() for t in (vm_tags or '').split(',') if t.strip()],
-                "scheduling_preemptible": bool(vm_preempt),
-                "scheduling_automatic_restart": bool(vm_auto_restart),
-                "scheduling_on_host_maintenance": vm_ohm or None,
-                "scheduling_provisioning_model": vm_prov_model or None,
-                "enable_shielded_vm": bool(vm_enable_shielded),
-                "shielded_secure_boot": bool(vm_sh_secure),
-                "shielded_vtpm": bool(vm_sh_vtpm),
-                "shielded_integrity_monitoring": bool(vm_sh_integrity),
-                "enable_confidential_compute": bool(vm_enable_conf),
-                "confidential_instance_type": vm_conf_type or None,
-                "labels": parse_json_default(vm_labels_str, {}),
-                "metadata": parse_json_default(vm_metadata_str, {}),
-                "boot_disk_labels": parse_json_default(vm_boot_labels_str, {}),
-                "metadata_startup_script": vm_startup or None,
-                "guest_accelerators": parse_json_default(vm_gpus_str, []),
-            }
-            st.session_state.compute_instances.append(new_vm)
-            st.rerun()
+            if add_clicked and vm_name:
+                def parse_json_default(s, default):
+                        try:
+                            return json.loads(s) if s else default
+                        except Exception:
+                            return default
+                new_vm = {
+                        "name": vm_name,
+                        "region": new_vm_region,
+                        "zone": vm_zone,
+                        "machine_type": st.session_state.new_vm_machine_type,
+                        "image": vm_image,
+                        "description": vm_description or None,
+                        "hostname": vm_hostname or None,
+                        "min_cpu_platform": vm_min_cpu or None,
+                        "network": vm_network or None,
+                        "subnetwork": vm_subnet or None,
+                        "network_ip": vm_network_ip or None,
+                        "external_network_tier": vm_ext_tier or None,
+                        "assign_external_ip": bool(vm_assign_eip),
+                        "allow_stopping_for_update": bool(vm_allow_stop),
+                        "can_ip_forward": bool(vm_can_ip_forward),
+                        "deletion_protection": bool(vm_del_prot),
+                        "enable_display": bool(vm_enable_display),
+                        "boot_disk_size_gb": int(vm_boot_size) if vm_boot_size else None,
+                        "boot_disk_type": vm_boot_type or None,
+                        "boot_disk_auto_delete": bool(vm_boot_auto),
+                        "service_account_email": vm_sa_email or None,
+                        "service_account_scopes": [s.strip() for s in (vm_sa_scopes or '').split(',') if s.strip()] or ["https://www.googleapis.com/auth/cloud-platform"],
+                        "tags": [t.strip() for t in (vm_tags or '').split(',') if t.strip()],
+                        "scheduling_preemptible": bool(vm_preempt),
+                        "scheduling_automatic_restart": bool(vm_auto_restart),
+                        "scheduling_on_host_maintenance": vm_ohm or None,
+                        "scheduling_provisioning_model": vm_prov_model or None,
+                        "enable_shielded_vm": bool(vm_enable_shielded),
+                        "shielded_secure_boot": bool(vm_sh_secure),
+                        "shielded_vtpm": bool(vm_sh_vtpm),
+                        "shielded_integrity_monitoring": bool(vm_sh_integrity),
+                        "enable_confidential_compute": bool(vm_enable_conf),
+                        "confidential_instance_type": vm_conf_type or None,
+                        "labels": parse_json_default(vm_labels_str, {}),
+                        "metadata": parse_json_default(vm_metadata_str, {}),
+                        "boot_disk_labels": parse_json_default(vm_boot_labels_str, {}),
+                        "metadata_startup_script": vm_startup or None,
+                        "guest_accelerators": parse_json_default(vm_gpus_str, []),
+                }
+                st.session_state.compute_instances.append(new_vm)
+                st.rerun()
 
-        if st.session_state.compute_instances:
+        # Always add Compute Instances to resources if they exist (regardless of checkbox)
+        if st.session_state.get("compute_instances"):
             resources["compute_instances"] = st.session_state.compute_instances
-    
-    # Storage Buckets
-    if st.checkbox("🪣 Create Storage Buckets"):
-        st.markdown("**Storage Configuration**")
-        if 'storage_buckets' not in st.session_state:
-            st.session_state.storage_buckets = []
+
+    # TAB 3: STORAGE & DATA RESOURCES
+    with tab3:
+        st.markdown("### 💾 Storage & Data")
+        st.markdown("Configure storage buckets, databases, and data services")
+        st.markdown("---")
+
+        # Storage & Data resources will be placed here
+
+        # Memorystore Redis
+        if st.checkbox("🔴 Create Memorystore Redis"):
+            st.markdown("**Memorystore Redis Configuration**")
+            if 'redis_instances' not in st.session_state:
+                st.session_state.redis_instances = []
         
-        # Display existing buckets with inline editing
-        if st.session_state.storage_buckets:
-            st.markdown("**Current Storage Buckets:**")
-            for i, bucket in enumerate(list(st.session_state.storage_buckets)):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    new_name = st.text_input("Name", value=bucket['name'], key=f"bucket_name_{i}")
-                with col2:
-                    new_location = st.selectbox("Location", ["US", "EU", "ASIA"], 
-                                              index=["US", "EU", "ASIA"].index(bucket['location']),
-                                              key=f"bucket_location_{i}")
-                with col3:
-                    if st.button("🗑️", key=f"del_bucket_{i}"):
-                        st.session_state.storage_buckets.pop(i)
-                        st.rerun()
-                
-                # Update if changed
-                if new_name != bucket['name'] or new_location != bucket['location']:
-                    st.session_state.storage_buckets[i]['name'] = new_name
-                    st.session_state.storage_buckets[i]['location'] = new_location
+            # Display existing Redis instances
+            if st.session_state.get("redis_instances"):
+                st.markdown("**Current Redis Instances:**")
+                for i, redis in enumerate(st.session_state.redis_instances):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        st.text(f"Name: {redis['name']}")
+                    with col2:
+                        st.text(f"Tier: {redis['tier']}")
+                    with col3:
+                        if st.button("🗑️", key=f"del_redis_{i}"):
+                            st.session_state.redis_instances.pop(i)
+                            st.rerun()
         
-        # Add new bucket
-        st.markdown("**Add New Storage Bucket:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            bucket_name = st.text_input("Bucket Name", value="my-bucket", key="new_bucket_name")
-        with col2:
-            bucket_location = st.selectbox("Location", ["US", "EU", "ASIA"], key="new_bucket_location")
-        with col3:
-            if st.button("➕ Add", key="add_bucket"):
-                if bucket_name:
-                    new_bucket = {
-                        "name": bucket_name,
-                        "location": bucket_location,
-                        "enable_versioning": False,
-                        "uniform_bucket_level_access": True
-                    }
-                    st.session_state.storage_buckets.append(new_bucket)
-                    st.rerun()
-        
-        if st.session_state.storage_buckets:
-            resources["storage_buckets"] = st.session_state.storage_buckets
-    
-    # Pub/Sub Topics
-    if st.checkbox("📢 Create Pub/Sub Topics"):
-        st.markdown("**Pub/Sub Configuration**")
-        if 'pubsub_topics' not in st.session_state:
-            st.session_state.pubsub_topics = []
-        
-        # Display existing topics
-        if st.session_state.pubsub_topics:
-            st.markdown("**Current Pub/Sub Topics:**")
-            for i, topic in enumerate(st.session_state.pubsub_topics):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.text(f"Name: {topic['name']}")
-                with col2:
-                    if st.button("🗑️", key=f"del_topic_{i}"):
-                        st.session_state.pubsub_topics.pop(i)
-                        st.rerun()
-        
-        # Add new topic
-        st.markdown("**Add New Pub/Sub Topic:**")
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            topic_name = st.text_input("Topic Name", value="my-topic", key="new_topic_name")
-        with col2:
-            if st.button("➕ Add", key="add_topic"):
-                if topic_name:
-                    new_topic = {
-                        "name": topic_name,
-                        "labels": {"created_by": "gui"}
-                    }
-                    st.session_state.pubsub_topics.append(new_topic)
-                    st.rerun()
-        
-        if st.session_state.pubsub_topics:
-            resources["pubsub_topics"] = st.session_state.pubsub_topics
-    
-    # Cloud Run Services
-    if st.checkbox("🚀 Create Cloud Run Services"):
-        st.markdown("**Cloud Run Configuration**")
-        if 'cloud_run_services' not in st.session_state:
-            st.session_state.cloud_run_services = []
-        
-        
-        # Initialize number of form sections
-        if 'cr_form_count' not in st.session_state:
-            st.session_state.cr_form_count = 1
-        
-        # Render form sections
-        for i in range(st.session_state.cr_form_count):
-            if i > 0:  # Add space between forms
-                st.markdown("---")
-            
-            st.markdown(f"**Cloud Run Service {i+1}:**")
-            
-            # Get or create service data for this form
-            if i >= len(st.session_state.cloud_run_services):
-                st.session_state.cloud_run_services.append({
-                    "name": f"my-service-{i+1}",
-                    "location": "us-central1",
-                    "image": "nginxinc/nginx-unprivileged:stable-alpine",
-                    "allow_unauthenticated": True
-                })
-            
-            service = st.session_state.cloud_run_services[i]
-            
-            # Form fields for this service
+            # Add new Redis instance
+            st.markdown("**Add New Redis Instance:**")
             col1, col2, col3 = st.columns([2, 2, 1])
             with col1:
-                form_name = st.text_input("Service Name", value=service['name'], key=f"cr_name_{i}")
+                redis_name = st.text_input("Redis Name", value="my-redis", key="new_redis_name")
             with col2:
-                form_location = st.selectbox("Location", ["us-central1", "us-west1", "europe-west1"], 
-                                           index=["us-central1", "us-west1", "europe-west1"].index(service['location']),
-                                           key=f"cr_location_{i}")
+                redis_tier = st.selectbox("Tier", ["BASIC", "STANDARD_HA"], key="new_redis_tier")
             with col3:
-                if st.button("🗑️", key=f"del_cr_{i}"):
-                    # Remove this service and adjust form count
-                    st.session_state.cloud_run_services.pop(i)
-                    st.session_state.cr_form_count -= 1
-                    st.rerun()
-            
-            form_image = st.text_input("Container Image", value=service['image'], key=f"cr_image_{i}")
-            form_auth = st.checkbox("Allow Unauthenticated", value=service['allow_unauthenticated'], key=f"cr_auth_{i}")
-            
-            # Update service data
-            st.session_state.cloud_run_services[i] = {
-                "name": form_name,
-                "location": form_location,
-                "image": form_image,
-                "allow_unauthenticated": form_auth
-            }
-        
-        # Add button to create new form section
-        if st.button("➕ Add Another Service", key="add_cr_service"):
-            st.session_state.cr_form_count += 1
-            st.rerun()
-        
-        if st.session_state.cloud_run_services:
-            resources["cloud_run_services"] = st.session_state.cloud_run_services
-    
-    # Cloud SQL Instances
-    if st.checkbox("🗄️ Create Cloud SQL Instances"):
-        st.markdown("**Cloud SQL Configuration**")
-        if 'cloud_sql_instances' not in st.session_state:
-            st.session_state.cloud_sql_instances = []
-        
-        # Display existing instances
-        if st.session_state.cloud_sql_instances:
-            st.markdown("**Current Cloud SQL Instances:**")
-            for i, sql in enumerate(st.session_state.cloud_sql_instances):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.text(f"Name: {sql['name']}")
-                with col2:
-                    st.text(f"Version: {sql['database_version']}")
-                with col3:
-                    if st.button("🗑️", key=f"del_sql_{i}"):
-                        st.session_state.cloud_sql_instances.pop(i)
+                if st.button("➕ Add", key="add_redis"):
+                    if redis_name:
+                        new_redis = {
+                            "name": redis_name,
+                            "region": "us-central1",
+                            "tier": redis_tier,
+                            "memory_size_gb": 1
+                        }
+                        st.session_state.redis_instances.append(new_redis)
                         st.rerun()
-        
-        # Add new instance
-        st.markdown("**Add New Cloud SQL Instance:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            sql_name = st.text_input("Instance Name", value="my-sql", key="new_sql_name")
-        with col2:
-            sql_version = st.selectbox("Database Version", ["POSTGRES_14", "MYSQL_8_0", "SQLSERVER_2019_STANDARD"], key="new_sql_version")
-        with col3:
-            if st.button("➕ Add", key="add_sql"):
-                if sql_name:
-                    new_sql = {
-                        "name": sql_name,
-                        "database_version": sql_version,
-                        "region": "us-central1",
-                        "tier": "db-f1-micro"
-                    }
-                    st.session_state.cloud_sql_instances.append(new_sql)
-                    st.rerun()
-        
-        if st.session_state.cloud_sql_instances:
-            resources["cloud_sql_instances"] = st.session_state.cloud_sql_instances
-    
-    # Artifact Registry
-    if st.checkbox("📦 Create Artifact Registry"):
-        st.markdown("**Artifact Registry Configuration**")
-        if 'artifact_repos' not in st.session_state:
-            st.session_state.artifact_repos = []
-        
-        # Display existing repos
-        if st.session_state.artifact_repos:
-            st.markdown("**Current Artifact Repositories:**")
-            for i, repo in enumerate(st.session_state.artifact_repos):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.text(f"Name: {repo['name']}")
-                with col2:
-                    st.text(f"Format: {repo['format']}")
-                with col3:
-                    if st.button("🗑️", key=f"del_ar_{i}"):
-                        st.session_state.artifact_repos.pop(i)
-                        st.rerun()
-        
-        # Add new repo
-        st.markdown("**Add New Artifact Repository:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            ar_name = st.text_input("Repository Name", value="my-repo", key="new_ar_name")
-        with col2:
-            ar_format = st.selectbox("Format", ["DOCKER", "MAVEN", "NPM", "PYTHON"], key="new_ar_format")
-        with col3:
-            if st.button("➕ Add", key="add_ar"):
-                if ar_name:
-                    new_ar = {
-                        "name": ar_name,
-                        "location": "us",
-                        "format": ar_format,
-                        "description": "Repository created via GUI"
-                    }
-                    st.session_state.artifact_repos.append(new_ar)
-                    st.rerun()
-        
-        if st.session_state.artifact_repos:
-            resources["artifact_repos"] = st.session_state.artifact_repos
-    
-    # Secret Manager
-    if st.checkbox("🔐 Create Secret Manager Secrets"):
-        st.markdown("**Secret Manager Configuration**")
-        if 'secrets' not in st.session_state:
-            st.session_state.secrets = []
-        
-        # Display existing secrets
-        if st.session_state.secrets:
-            st.markdown("**Current Secrets:**")
-            for i, secret in enumerate(st.session_state.secrets):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.text(f"Name: {secret['name']}")
-                with col2:
-                    if st.button("🗑️", key=f"del_secret_{i}"):
-                        st.session_state.secrets.pop(i)
-                        st.rerun()
-        
-        # Add new secret
-        st.markdown("**Add New Secret:**")
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            secret_name = st.text_input("Secret Name", value="my-secret", key="new_secret_name")
-        with col2:
-            if st.button("➕ Add", key="add_secret"):
-                if secret_name:
-                    new_secret = {
-                        "name": secret_name,
-                        "value": "dummy-value"
-                    }
-                    st.session_state.secrets.append(new_secret)
-                    st.rerun()
-        
-        if st.session_state.secrets:
-            resources["secrets"] = st.session_state.secrets
-    
-    # Cloud DNS Zones
-    if st.checkbox("🌐 Create Cloud DNS Zones"):
-        st.markdown("**Cloud DNS Configuration**")
-        if 'dns_zones' not in st.session_state:
-            st.session_state.dns_zones = []
-        
-        # Display existing zones
-        if st.session_state.dns_zones:
-            st.markdown("**Current DNS Zones:**")
-            for i, zone in enumerate(st.session_state.dns_zones):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.text(f"Name: {zone['name']} ({zone['dns_name']})")
-                with col2:
-                    if st.button("🗑️", key=f"del_dns_{i}"):
-                        st.session_state.dns_zones.pop(i)
-                        st.rerun()
-        
-        # Add new zone
-        st.markdown("**Add New DNS Zone:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            dns_name = st.text_input("Zone Name", value="my-zone", key="new_dns_name")
-        with col2:
-            dns_domain = st.text_input("DNS Name", value="example.com.", key="new_dns_domain")
-        with col3:
-            if st.button("➕ Add", key="add_dns"):
-                if dns_name and dns_domain:
-                    new_dns = {
-                        "name": dns_name,
-                        "dns_name": dns_domain,
-                        "description": "DNS zone created via GUI"
-                    }
-                    st.session_state.dns_zones.append(new_dns)
-                    st.rerun()
-        
-        if st.session_state.dns_zones:
-            resources["dns_zones"] = st.session_state.dns_zones
-    
-    # BigQuery Datasets
-    if st.checkbox("📊 Create BigQuery Datasets"):
-        st.markdown("**BigQuery Configuration**")
-        if 'bigquery_datasets' not in st.session_state:
-            st.session_state.bigquery_datasets = []
-        
-        # Display existing datasets
-        if st.session_state.bigquery_datasets:
-            st.markdown("**Current BigQuery Datasets:**")
-            for i, dataset in enumerate(st.session_state.bigquery_datasets):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.text(f"Dataset ID: {dataset['dataset_id']}")
-                with col2:
-                    if st.button("🗑️", key=f"del_bq_{i}"):
-                        st.session_state.bigquery_datasets.pop(i)
-                        st.rerun()
-        
-        # Add new dataset
-        st.markdown("**Add New BigQuery Dataset:**")
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            bq_id = st.text_input("Dataset ID", value="my_dataset", key="new_bq_id")
-        with col2:
-            if st.button("➕ Add", key="add_bq"):
-                if bq_id:
-                    new_bq = {
-                        "dataset_id": bq_id,
-                        "location": "US"
-                    }
-                    st.session_state.bigquery_datasets.append(new_bq)
-                    st.rerun()
-        
-        if st.session_state.bigquery_datasets:
-            resources["bigquery_datasets"] = st.session_state.bigquery_datasets
-    
-    # Cloud Functions
-    if st.checkbox("⚡ Create Cloud Functions"):
-        st.markdown("**Cloud Functions Configuration**")
-        if 'cloud_functions' not in st.session_state:
-            st.session_state.cloud_functions = []
-        
-        # Display existing functions
-        if st.session_state.cloud_functions:
-            st.markdown("**Current Cloud Functions:**")
-            for i, func in enumerate(st.session_state.cloud_functions):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.text(f"Name: {func['name']}")
-                with col2:
-                    st.text(f"Runtime: {func['runtime']}")
-                with col3:
-                    if st.button("🗑️", key=f"del_cf_{i}"):
-                        st.session_state.cloud_functions.pop(i)
-                        st.rerun()
-        
-        # Add new function
-        st.markdown("**Add New Cloud Function:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            cf_name = st.text_input("Function Name", value="my-function", key="new_cf_name")
-        with col2:
-            cf_runtime = st.selectbox("Runtime", ["python311", "nodejs18", "go119"], key="new_cf_runtime")
-        with col3:
-            if st.button("➕ Add", key="add_cf"):
-                if cf_name:
-                    new_cf = {
-                        "name": cf_name,
-                        "location": "us-central1",
-                        "runtime": cf_runtime,
-                        "entry_point": "main",
-                        "source_bucket": "my-bucket",
-                        "source_object": "functions/function.zip"
-                    }
-                    st.session_state.cloud_functions.append(new_cf)
-                    st.rerun()
-        
-        if st.session_state.cloud_functions:
-            resources["cloud_functions"] = st.session_state.cloud_functions
-    
-    # GKE Cluster
-    if st.checkbox("☸️ Create GKE Cluster"):
-        st.markdown("**GKE Configuration**")
-        gke_name = st.text_input("Cluster Name", value="my-gke", key="gke_name")
-        gke_location = st.selectbox("Location", ["us-central1", "us-west1", "europe-west1"], key="gke_location")
-        gke_machine_type = st.selectbox("Node Machine Type", ["e2-standard-2", "e2-standard-4", "e2-standard-8"], key="gke_machine_type")
-        gke_node_count = st.number_input("Node Count", min_value=1, max_value=10, value=1, key="gke_node_count")
-        
-        if gke_name:
-            resources["gke"] = {
-                "name": gke_name,
-                "location": gke_location,
-                "node_pool_name": "default-pool",
-                "node_count": gke_node_count,
-                "machine_type": gke_machine_type
-            }
-    
-    # Cloud Router
-    if st.checkbox("🛣️ Create Cloud Router"):
-        st.markdown("**Cloud Router Configuration**")
-        router_name = st.text_input("Router Name", value="my-router", key="router_name")
-        router_region = st.selectbox("Region", ["us-central1", "us-west1", "europe-west1"], key="router_region")
-        
-        if router_name:
-            resources["cloud_router"] = {
-                "name": router_name,
-                "region": router_region,
-                "network": "my-vpc"
-            }
-    
-    # Cloud NAT
-    if st.checkbox("🌍 Create Cloud NAT"):
-        st.markdown("**Cloud NAT Configuration**")
-        nat_name = st.text_input("NAT Name", value="my-nat", key="nat_name")
-        nat_region = st.selectbox("Region", ["us-central1", "us-west1", "europe-west1"], key="nat_region")
-        
-        if nat_name:
-            resources["cloud_nat"] = {
-                "name": nat_name,
-                "region": nat_region,
-                "router": "my-router"
-            }
-    
-    # Static IPs
-    if st.checkbox("🌐 Create Static IPs"):
-        st.markdown("**Static IP Configuration**")
-        if 'static_ips' not in st.session_state:
-            st.session_state.static_ips = []
-        
-        # Display existing IPs
-        if st.session_state.static_ips:
-            st.markdown("**Current Static IPs:**")
-            for i, ip in enumerate(st.session_state.static_ips):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.text(f"Name: {ip['name']}")
-                with col2:
-                    st.text(f"Type: {ip['address_type']}")
-                with col3:
-                    if st.button("🗑️", key=f"del_ip_{i}"):
-                        st.session_state.static_ips.pop(i)
-                        st.rerun()
-        
-        # Add new IP
-        st.markdown("**Add New Static IP:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            ip_name = st.text_input("IP Name", value="my-ip", key="new_ip_name")
-        with col2:
-            ip_type = st.selectbox("Address Type", ["EXTERNAL", "INTERNAL"], key="new_ip_type")
-        with col3:
-            if st.button("➕ Add", key="add_ip"):
-                if ip_name:
-                    new_ip = {
-                        "name": ip_name,
-                        "address_type": ip_type,
-                        "description": "Static IP created via GUI"
-                    }
-                    st.session_state.static_ips.append(new_ip)
-                    st.rerun()
-        
-        if st.session_state.static_ips:
-            resources["static_ips"] = st.session_state.static_ips
-    
-    # Compute Disks
-    if st.checkbox("💾 Create Compute Disks"):
-        st.markdown("**Compute Disk Configuration**")
-        if 'disks' not in st.session_state:
-            st.session_state.disks = []
-        
-        # Display existing disks
-        if st.session_state.disks:
-            st.markdown("**Current Compute Disks:**")
-            for i, disk in enumerate(st.session_state.disks):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.text(f"Name: {disk['name']}")
-                with col2:
-                    st.text(f"Size: {disk['size_gb']}GB")
-                with col3:
-                    if st.button("🗑️", key=f"del_disk_{i}"):
-                        st.session_state.disks.pop(i)
-                        st.rerun()
-        
-        # Add new disk
-        st.markdown("**Add New Compute Disk:**")
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-        with col1:
-            disk_name = st.text_input("Disk Name", value="my-disk", key="new_disk_name")
-        with col2:
-            disk_zone = st.selectbox("Zone", ["us-central1-a", "us-west1-a", "europe-west1-a"], key="new_disk_zone")
-        with col3:
-            disk_size = st.number_input("Size (GB)", min_value=1, max_value=1000, value=10, key="new_disk_size")
-        with col4:
-            if st.button("➕ Add", key="add_disk"):
-                if disk_name:
-                    new_disk = {
-                        "name": disk_name,
-                        "zone": disk_zone,
-                        "size_gb": disk_size,
-                        "type": "pd-standard"
-                    }
-                    st.session_state.disks.append(new_disk)
-                    st.rerun()
-        
-        if st.session_state.disks:
-            resources["disks"] = st.session_state.disks
-    
-    # Memorystore Redis
-    if st.checkbox("🔴 Create Memorystore Redis"):
-        st.markdown("**Memorystore Redis Configuration**")
-        if 'redis_instances' not in st.session_state:
-            st.session_state.redis_instances = []
-        
-        # Display existing Redis instances
-        if st.session_state.redis_instances:
-            st.markdown("**Current Redis Instances:**")
-            for i, redis in enumerate(st.session_state.redis_instances):
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.text(f"Name: {redis['name']}")
-                with col2:
-                    st.text(f"Tier: {redis['tier']}")
-                with col3:
-                    if st.button("🗑️", key=f"del_redis_{i}"):
-                        st.session_state.redis_instances.pop(i)
-                        st.rerun()
-        
-        # Add new Redis instance
-        st.markdown("**Add New Redis Instance:**")
-        col1, col2, col3 = st.columns([2, 2, 1])
-        with col1:
-            redis_name = st.text_input("Redis Name", value="my-redis", key="new_redis_name")
-        with col2:
-            redis_tier = st.selectbox("Tier", ["BASIC", "STANDARD_HA"], key="new_redis_tier")
-        with col3:
-            if st.button("➕ Add", key="add_redis"):
-                if redis_name:
-                    new_redis = {
-                        "name": redis_name,
-                        "region": "us-central1",
-                        "tier": redis_tier,
-                        "memory_size_gb": 1
-                    }
-                    st.session_state.redis_instances.append(new_redis)
-                    st.rerun()
-        
-        if st.session_state.redis_instances:
+
+        # Always add Redis Instances to resources if they exist (regardless of checkbox)
+        if st.session_state.get("redis_instances"):
             resources["redis_instances"] = st.session_state.redis_instances
-    
-    # Serverless VPC Connectors
-    if st.checkbox("🔗 Create Serverless VPC Connectors"):
-        st.markdown("**Serverless VPC Connector Configuration**")
-        if 'serverless_vpc_connectors' not in st.session_state:
-            st.session_state.serverless_vpc_connectors = []
+
+        # BigQuery Datasets
+        if st.checkbox("📊 Create BigQuery Datasets"):
+            st.markdown("**BigQuery Configuration**")
+            if 'bigquery_datasets' not in st.session_state:
+                st.session_state.bigquery_datasets = []
         
-        # Display existing connectors
-        if st.session_state.serverless_vpc_connectors:
-            st.markdown("**Current VPC Connectors:**")
-            for i, connector in enumerate(st.session_state.serverless_vpc_connectors):
+            # Display existing datasets
+            if st.session_state.get("bigquery_datasets"):
+                st.markdown("**Current BigQuery Datasets:**")
+                for i, dataset in enumerate(st.session_state.bigquery_datasets):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.text(f"Dataset ID: {dataset['dataset_id']}")
+                    with col2:
+                        if st.button("🗑️", key=f"del_bq_{i}"):
+                            st.session_state.bigquery_datasets.pop(i)
+                            st.rerun()
+        
+            # Add new dataset
+            st.markdown("**Add New BigQuery Dataset:**")
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                bq_id = st.text_input("Dataset ID", value="my_dataset", key="new_bq_id")
+            with col2:
+                if st.button("➕ Add", key="add_bq"):
+                    if bq_id:
+                        new_bq = {
+                            "dataset_id": bq_id,
+                            "location": "US"
+                        }
+                        st.session_state.bigquery_datasets.append(new_bq)
+                        st.rerun()
+
+        # Always add BigQuery Datasets to resources if they exist (regardless of checkbox)
+        if st.session_state.get("bigquery_datasets"):
+            resources["bigquery_datasets"] = st.session_state.bigquery_datasets
+
+        # Cloud SQL Instances
+        if st.checkbox("🗄️ Create Cloud SQL Instances"):
+            st.markdown("**Cloud SQL Configuration**")
+            if 'cloud_sql_instances' not in st.session_state:
+                st.session_state.cloud_sql_instances = []
+        
+            # Display existing instances
+            if st.session_state.get("cloud_sql_instances"):
+                st.markdown("**Current Cloud SQL Instances:**")
+                for i, sql in enumerate(st.session_state.cloud_sql_instances):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        st.text(f"Name: {sql['name']}")
+                    with col2:
+                        st.text(f"Version: {sql['database_version']}")
+                    with col3:
+                        if st.button("🗑️", key=f"del_sql_{i}"):
+                            st.session_state.cloud_sql_instances.pop(i)
+                            st.rerun()
+        
+            # Add new instance
+            st.markdown("**Add New Cloud SQL Instance:**")
+            col1, col2, col3 = st.columns([2, 2, 1])
+            with col1:
+                sql_name = st.text_input("Instance Name", value="my-sql", key="new_sql_name")
+            with col2:
+                sql_version = st.selectbox("Database Version", ["POSTGRES_14", "MYSQL_8_0", "SQLSERVER_2019_STANDARD"], key="new_sql_version")
+            with col3:
+                if st.button("➕ Add", key="add_sql"):
+                    if sql_name:
+                        new_sql = {
+                            "name": sql_name,
+                            "database_version": sql_version,
+                            "region": "us-central1",
+                            "tier": "db-f1-micro"
+                        }
+                        st.session_state.cloud_sql_instances.append(new_sql)
+                        st.rerun()
+
+        # Always add Cloud SQL Instances to resources if they exist (regardless of checkbox)
+        if st.session_state.get("cloud_sql_instances"):
+            resources["cloud_sql_instances"] = st.session_state.cloud_sql_instances
+
+        # Storage Buckets
+        if st.checkbox("🪣 Create Storage Buckets"):
+            if 'storage_buckets' not in st.session_state:
+                st.session_state.storage_buckets = []
+
+            # Display existing buckets with inline editing
+            if st.session_state.get("storage_buckets"):
+                with st.expander(f"📋 Current Storage Buckets ({len(st.session_state.storage_buckets)})", expanded=False):
+                    for i, bucket in enumerate(list(st.session_state.storage_buckets)):
+                        col1, col2, col3 = st.columns([2, 2, 1])
+                        with col1:
+                            new_name = st.text_input("Name", value=bucket['name'], key=f"bucket_name_{i}")
+                        with col2:
+                            new_location = st.selectbox("Location", ["US", "EU", "ASIA"], 
+                                                      index=["US", "EU", "ASIA"].index(bucket['location']),
+                                                      key=f"bucket_location_{i}")
+                        with col3:
+                            if st.button("🗑️", key=f"del_bucket_{i}"):
+                                st.session_state.storage_buckets.pop(i)
+                                st.rerun()
+                    
+                        # Update if changed
+                        if new_name != bucket['name'] or new_location != bucket['location']:
+                            st.session_state.storage_buckets[i]['name'] = new_name
+                            st.session_state.storage_buckets[i]['location'] = new_location
+        
+            # Add new bucket
+            st.markdown("**Add New Storage Bucket:**")
+            col1, col2 = st.columns([2, 2])
+            with col1:
+                bucket_name = st.text_input("Bucket Name", value="my-bucket", key="new_bucket_name")
+            with col2:
+                bucket_location = st.selectbox("Location", ["US", "EU", "ASIA"], key="new_bucket_location")
+
+            col3, col4, col5 = st.columns([2, 2, 1])
+            with col3:
+                enable_versioning = st.checkbox("Enable Versioning", value=False, key="bucket_versioning")
+            with col4:
+                force_destroy = st.checkbox("Force Destroy", value=False, key="bucket_force_destroy",
+                                           help="Allow bucket deletion even if it contains objects")
+            with col5:
+                if st.button("➕ Add", key="add_bucket"):
+                    if bucket_name:
+                        new_bucket = {
+                            "name": bucket_name,
+                            "location": bucket_location,
+                            "enable_versioning": enable_versioning,
+                            "force_destroy": force_destroy,
+                            "uniform_bucket_level_access": True
+                        }
+                        st.session_state.storage_buckets.append(new_bucket)
+                        st.rerun()
+
+        # Always add storage buckets to resources if they exist (regardless of checkbox)
+        if st.session_state.get("storage_buckets"):
+            resources["storage_buckets"] = st.session_state.storage_buckets
+
+        # (Storage Buckets, Cloud SQL, BigQuery, Redis)
+
+    # TAB 5: SERVICES RESOURCES
+    # TAB 4: SECURITY RESOURCES
+    with tab4:
+        st.markdown("### 🔐 Security & Access Control")
+        st.markdown("Configure service accounts, IAM policies, and secrets management")
+        st.markdown("---")
+
+
+        # Secret Manager
+        if st.checkbox("🔐 Create Secret Manager Secrets"):
+            st.markdown("**Secret Manager Configuration**")
+            if 'secrets' not in st.session_state:
+                st.session_state.secrets = []
+        
+            # Display existing secrets
+            if st.session_state.get("secrets"):
+                st.markdown("**Current Secrets:**")
+                for i, secret in enumerate(st.session_state.secrets):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.text(f"Name: {secret['name']}")
+                    with col2:
+                        if st.button("🗑️", key=f"del_secret_{i}"):
+                            st.session_state.secrets.pop(i)
+                            st.rerun()
+        
+            # Add new secret
+            st.markdown("**Add New Secret:**")
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                secret_name = st.text_input("Secret Name", value="my-secret", key="new_secret_name")
+            with col2:
+                if st.button("➕ Add", key="add_secret"):
+                    if secret_name:
+                        new_secret = {
+                            "name": secret_name,
+                            "value": "dummy-value"
+                        }
+                        st.session_state.secrets.append(new_secret)
+                        st.rerun()
+
+        # Always add Secrets to resources if they exist (regardless of checkbox)
+        if st.session_state.get("secrets"):
+            resources["secrets"] = st.session_state.secrets
+
+        # Service Accounts
+        if st.checkbox("👤 Create Service Accounts", key="checkbox_sa"):
+            if 'service_accounts' not in st.session_state:
+                st.session_state.service_accounts = []
+            if 'service_account_form_count' not in st.session_state:
+                st.session_state.service_account_form_count = 1
+
+            # Display existing Service Accounts in a collapsible section
+            if st.session_state.get("service_accounts"):
+                with st.expander(f"📋 Current Service Accounts ({len(st.session_state.service_accounts)})", expanded=False):
+                    for idx, sa in enumerate(st.session_state.service_accounts):
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                        with col1:
+                            st.text(f"**{sa.get('account_id', 'unnamed')}**")
+                        with col2:
+                            st.text(f"Display: {sa.get('display_name', 'N/A')}")
+                        with col3:
+                            roles_count = len(sa.get('roles', []))
+                            st.text(f"Roles: {roles_count}")
+                        with col4:
+                            if st.button("🗑️", key=f"del_sa_list_{idx}"):
+                                st.session_state.service_accounts.pop(idx)
+                                if st.session_state.service_account_form_count > 1:
+                                    st.session_state.service_account_form_count -= 1
+                                st.rerun()
+                        if idx < len(st.session_state.service_accounts) - 1:
+                            st.markdown("---")
+
+            st.markdown("**Configure Service Account:**")
+            for i in range(st.session_state.service_account_form_count):
+                if i > 0:
+                    st.markdown("---")
+
+                # Ensure data object exists
+                if i >= len(st.session_state.service_accounts):
+                    st.session_state.service_accounts.append({
+                        "account_id": f"service-account-{i+1}",
+                        "display_name": f"Service Account {i+1}",
+                        "description": "Service account created via GUI",
+                        "disabled": False,
+                        "create_ignore_already_exists": False,
+                        "roles": [],
+                        "create_key": False,
+                        "key_algorithm": "KEY_ALG_RSA_2048",
+                        "public_key_type": "TYPE_X509_PEM_FILE",
+                        "private_key_type": "TYPE_GOOGLE_CREDENTIALS_FILE",
+                        "key_file_path": None
+                    })
+
+                sa = st.session_state.service_accounts[i]
+
+                st.markdown(f"**Service Account {i+1}:**")
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+                with col1:
+                    form_account_id = st.text_input("Account ID", value=sa.get('account_id', ''), key=f"sa_account_id_{i}")
+                with col2:
+                    form_display_name = st.text_input("Display Name", value=sa.get('display_name', ''), key=f"sa_display_name_{i}")
+                with col3:
+                    form_description = st.text_input("Description", value=sa.get('description', ''), key=f"sa_description_{i}")
+                with col4:
+                    if st.button("🗑️", key=f"del_sa_{i}"):
+                        st.session_state.service_accounts.pop(i)
+                        st.session_state.service_account_form_count -= 1
+                        st.rerun()
+
+                # Permissions/Roles selection
+                st.markdown("**Permissions:**")
+                common_roles = [
+                    # Basic IAM Roles
+                    "roles/browser",
+                    "roles/viewer", 
+                    "roles/editor",
+                    "roles/owner",
+                    # Storage Roles
+                    "roles/storage.objectViewer",
+                    "roles/storage.objectCreator", 
+                    "roles/storage.objectAdmin",
+                    # Compute Roles
+                    "roles/compute.instanceAdmin",
+                    "roles/compute.networkViewer",
+                    # Logging & Monitoring
+                    "roles/logging.logWriter",
+                    "roles/monitoring.metricWriter",
+                    # Security Roles
+                    "roles/secretmanager.secretAccessor",
+                    "roles/iam.serviceAccountUser",
+                    "roles/iam.serviceAccountTokenCreator",
+                    # Database Roles
+                    "roles/cloudsql.client",
+                    # Analytics Roles
+                    "roles/bigquery.dataViewer",
+                    "roles/bigquery.dataEditor",
+                    # Serverless Roles
+                    "roles/run.invoker",
+                    "roles/cloudfunctions.invoker"
+                ]
+                
+                # Get current roles or default to empty list
+                current_roles = sa.get('roles', [])
+                form_roles = st.multiselect(
+                    "IAM Roles",
+                    common_roles,
+                    default=current_roles,
+                    key=f"sa_roles_{i}",
+                    help="Select IAM roles to assign to this service account"
+                )
+
+                # Advanced service account options (collapsible)
+                with st.expander("🔧 Advanced Service Account Options", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_disabled = st.checkbox(
+                            "Disabled", 
+                            value=sa.get('disabled', False),
+                            key=f"sa_disabled_{i}"
+                        )
+                    with col2:
+                        form_ignore_exists = st.checkbox(
+                            "Ignore Already Exists", 
+                            value=sa.get('create_ignore_already_exists', False),
+                            key=f"sa_ignore_exists_{i}"
+                        )
+                    
+                    # Custom roles input
+                    st.markdown("**Custom Roles:**")
+                    form_custom_roles = st.text_area(
+                        "Custom IAM Roles (one per line)",
+                        value="\n".join([role for role in current_roles if role not in common_roles]),
+                        key=f"sa_custom_roles_{i}",
+                        help="Enter custom IAM roles that are not in the common list above"
+                    )
+
+                # Key Management section
+                st.markdown("**Key Management:**")
+                form_create_key = st.checkbox(
+                    "Create Service Account Key", 
+                    value=sa.get('create_key', False),
+                    key=f"sa_create_key_{i}",
+                    help="Generate a new service account key for this service account"
+                )
+                
+                if form_create_key:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        form_key_algorithm = st.selectbox(
+                            "Key Algorithm",
+                            ["KEY_ALG_RSA_1024", "KEY_ALG_RSA_2048"],
+                            index=1 if sa.get('key_algorithm', 'KEY_ALG_RSA_2048') == 'KEY_ALG_RSA_2048' else 0,
+                            key=f"sa_key_algorithm_{i}"
+                        )
+                        form_public_key_type = st.selectbox(
+                            "Public Key Type",
+                            ["TYPE_NONE", "TYPE_X509_PEM_FILE", "TYPE_RAW_PUBLIC_KEY"],
+                            index=1 if sa.get('public_key_type', 'TYPE_X509_PEM_FILE') == 'TYPE_X509_PEM_FILE' else 0,
+                            key=f"sa_public_key_type_{i}"
+                        )
+                    with col2:
+                        form_private_key_type = st.selectbox(
+                            "Private Key Type",
+                            ["TYPE_UNSPECIFIED", "TYPE_PKCS12_FILE", "TYPE_GOOGLE_CREDENTIALS_FILE"],
+                            index=2 if sa.get('private_key_type', 'TYPE_GOOGLE_CREDENTIALS_FILE') == 'TYPE_GOOGLE_CREDENTIALS_FILE' else 0,
+                            key=f"sa_private_key_type_{i}"
+                        )
+                        form_key_file_path = st.text_input(
+                            "Key File Path (optional)",
+                            value=sa.get('key_file_path', ''),
+                            placeholder="/path/to/save/key.json",
+                            key=f"sa_key_file_path_{i}",
+                            help="Optional: Path to save the service account key file"
+                        )
+
+                # Parse custom roles from text area
+                custom_roles = []
+                if form_custom_roles and form_custom_roles.strip():
+                    custom_roles = [role.strip() for role in form_custom_roles.split('\n') if role.strip()]
+                
+                # Combine common roles and custom roles
+                all_roles = form_roles + custom_roles
+
+                # Update service account data
+                st.session_state.service_accounts[i] = {
+                    "account_id": form_account_id,
+                    "display_name": form_display_name,
+                    "description": form_description if form_description and form_description.strip() else None,
+                    "disabled": form_disabled,
+                    "create_ignore_already_exists": form_ignore_exists,
+                    "roles": all_roles,
+                    "create_key": form_create_key,
+                    "key_algorithm": form_key_algorithm if form_create_key else None,
+                    "public_key_type": form_public_key_type if form_create_key else None,
+                    "private_key_type": form_private_key_type if form_create_key else None,
+                    "key_file_path": form_key_file_path if form_create_key and form_key_file_path and form_key_file_path.strip() else None
+                }
+
+            # Add button to create another service account
+            if st.button("➕ Add Another Service Account", key="add_sa_section"):
+                st.session_state.service_account_form_count += 1
+                st.rerun()
+
+        # Always add Service Accounts to resources if they exist (regardless of checkbox)
+        if st.session_state.get("service_accounts"):
+            resources["service_accounts"] = st.session_state.service_accounts
+
+        # IAM
+        if st.checkbox("🔐 Create IAM Policies", key="checkbox_iam"):
+            if 'iam' not in st.session_state:
+                st.session_state.iam = []
+            if 'iam_form_count' not in st.session_state:
+                st.session_state.iam_form_count = 1
+
+            # Display existing IAM Policies in a collapsible section
+            if st.session_state.get("iam"):
+                with st.expander(f"📋 Current IAM Policies ({len(st.session_state.iam)})", expanded=False):
+                    for idx, policy in enumerate(st.session_state.iam):
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                        with col1:
+                            iam_type = policy.get('iam_type', 'member')
+                            st.text(f"**Type: {iam_type}**")
+                        with col2:
+                            st.text(f"Role: {policy.get('role', 'N/A')}")
+                        with col3:
+                            member = policy.get('member', 'N/A')
+                            if len(member) > 20:
+                                member = member[:20] + "..."
+                            st.text(f"Member: {member}")
+                        with col4:
+                            if st.button("🗑️", key=f"del_iam_list_{idx}"):
+                                st.session_state.iam.pop(idx)
+                                if st.session_state.iam_form_count > 1:
+                                    st.session_state.iam_form_count -= 1
+                                st.rerun()
+                        if idx < len(st.session_state.iam) - 1:
+                            st.markdown("---")
+
+            st.markdown("**Configure IAM Policy:**")
+            for i in range(st.session_state.iam_form_count):
+                if i > 0:
+                    st.markdown("---")
+
+                # Ensure data object exists
+                if i >= len(st.session_state.iam):
+                    st.session_state.iam.append({
+                        "iam_type": "member",
+                        "role": "roles/viewer",
+                        "member": "user:example@domain.com",
+                        "members": [],
+                        "policy_data": None,
+                        "service": None,
+                        "audit_log_configs": [],
+                        "condition": None
+                    })
+
+                binding = st.session_state.iam[i]
+
+                st.markdown(f"**IAM Policy {i+1}:**")
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+                with col1:
+                    form_iam_type = st.selectbox(
+                        "IAM Type",
+                        ["member", "binding", "policy", "audit_config"],
+                        index=["member", "binding", "policy", "audit_config"].index(binding.get('iam_type', 'member')),
+                        key=f"iam_type_{i}"
+                    )
+                with col2:
+                    if form_iam_type in ["member", "binding"]:
+                        # Common IAM roles
+                        common_roles = [
+                            "Custom Role",  # Allow custom role input
+                            "roles/owner",
+                            "roles/editor", 
+                            "roles/viewer",
+                            "roles/browser",
+                            "roles/iam.serviceAccountUser",
+                            "roles/iam.serviceAccountTokenCreator",
+                            "roles/iam.serviceAccountKeyAdmin",
+                            "roles/iam.serviceAccountAdmin",
+                            "roles/iam.organizationRoleAdmin",
+                            "roles/iam.roleAdmin",
+                            "roles/iam.workloadIdentityUser",
+                            "roles/storage.admin",
+                            "roles/storage.objectAdmin",
+                            "roles/storage.objectCreator",
+                            "roles/storage.objectViewer",
+                            "roles/compute.admin",
+                            "roles/compute.instanceAdmin",
+                            "roles/compute.instanceAdmin.v1",
+                            "roles/compute.networkAdmin",
+                            "roles/compute.securityAdmin",
+                            "roles/compute.viewer",
+                            "roles/container.admin",
+                            "roles/container.clusterAdmin",
+                            "roles/container.developer",
+                            "roles/container.viewer",
+                            "roles/cloudsql.admin",
+                            "roles/cloudsql.client",
+                            "roles/cloudsql.viewer",
+                            "roles/secretmanager.admin",
+                            "roles/secretmanager.secretAccessor",
+                            "roles/secretmanager.viewer",
+                            "roles/pubsub.admin",
+                            "roles/pubsub.editor",
+                            "roles/pubsub.publisher",
+                            "roles/pubsub.subscriber",
+                            "roles/pubsub.viewer",
+                            "roles/cloudfunctions.admin",
+                            "roles/cloudfunctions.developer",
+                            "roles/cloudfunctions.invoker",
+                            "roles/cloudfunctions.viewer",
+                            "roles/run.admin",
+                            "roles/run.developer",
+                            "roles/run.invoker",
+                            "roles/run.viewer",
+                            "roles/logging.admin",
+                            "roles/logging.viewer",
+                            "roles/monitoring.admin",
+                            "roles/monitoring.viewer",
+                            "roles/securitycenter.admin",
+                            "roles/securitycenter.viewer",
+                            "roles/dns.admin",
+                            "roles/dns.reader",
+                            "roles/firebase.admin",
+                            "roles/firebase.analyticsAdmin",
+                            "roles/firebase.analyticsViewer",
+                            "roles/bigquery.admin",
+                            "roles/bigquery.dataEditor",
+                            "roles/bigquery.dataViewer",
+                            "roles/bigquery.jobUser",
+                            "roles/bigquery.user",
+                            "roles/artifactregistry.admin",
+                            "roles/artifactregistry.reader",
+                            "roles/artifactregistry.writer"
+                        ]
+                        
+                        # Get current role value
+                        current_role = binding.get('role', '')
+                        
+                        # If current role is not in the list, add it as custom option
+                        if current_role and current_role not in common_roles:
+                            common_roles.insert(0, current_role)
+                        
+                        form_role = st.selectbox(
+                            "Role", 
+                            options=common_roles,
+                            index=common_roles.index(current_role) if current_role in common_roles else 0,
+                            key=f"iam_role_{i}",
+                            help="Select a predefined role or choose custom for manual entry"
+                        )
+                        
+                        # Show custom role input if "Custom Role" is selected
+                        if form_role == "Custom Role":
+                            form_role = st.text_input(
+                                "Custom Role", 
+                                value="",
+                                placeholder="roles/custom.role",
+                                key=f"iam_custom_role_{i}"
+                            )
+                    elif form_iam_type == "policy":
+                        form_policy_data = st.text_area(
+                            "Policy Data (JSON)", 
+                            value=binding.get('policy_data', ''),
+                            placeholder='{"bindings": [{"role": "roles/viewer", "members": ["user:example@domain.com"]}]}',
+                            key=f"iam_policy_data_{i}"
+                        )
+                    else:  # audit_config
+                        form_service = st.text_input(
+                            "Service", 
+                            value=binding.get('service', ''),
+                            placeholder="allServices or compute.googleapis.com",
+                            key=f"iam_service_{i}"
+                        )
+                with col3:
+                    if form_iam_type == "member":
+                        form_member = st.text_input(
+                            "Member", 
+                            value=binding.get('member', ''),
+                            placeholder="user:example@domain.com",
+                            key=f"iam_member_{i}"
+                        )
+                    elif form_iam_type == "binding":
+                        form_members = st.text_area(
+                            "Members (one per line)", 
+                            value="\n".join(binding.get('members', [])),
+                            placeholder="user:example@domain.com\nserviceAccount:sa@project.iam.gserviceaccount.com",
+                            key=f"iam_members_{i}"
+                        )
+                    elif form_iam_type == "audit_config":
+                        form_audit_logs = st.text_area(
+                            "Audit Log Configs (JSON)", 
+                            value=json.dumps(binding.get('audit_log_configs', []), indent=2),
+                            placeholder='[{"log_type": "ADMIN_READ", "exempted_members": []}]',
+                            key=f"iam_audit_logs_{i}"
+                        )
+                with col4:
+                    if st.button("🗑️", key=f"del_iam_{i}"):
+                        st.session_state.iam.pop(i)
+                        st.session_state.iam_form_count -= 1
+                        st.rerun()
+
+                # IAM Conditions (for member and binding types)
+                if form_iam_type in ["member", "binding"]:
+                    with st.expander("🔧 IAM Conditions (Optional)", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            form_condition_title = st.text_input(
+                                "Condition Title", 
+                                value=binding.get('condition', {}).get('title', '') if binding.get('condition') else '',
+                                placeholder="expires_after_2024",
+                                key=f"iam_condition_title_{i}"
+                            )
+                        with col2:
+                            form_condition_expression = st.text_input(
+                                "Condition Expression", 
+                                value=binding.get('condition', {}).get('expression', '') if binding.get('condition') else '',
+                                placeholder='request.time < timestamp("2024-12-31T23:59:59Z")',
+                                key=f"iam_condition_expression_{i}"
+                            )
+                        form_condition_description = st.text_input(
+                            "Condition Description (Optional)", 
+                            value=binding.get('condition', {}).get('description', '') if binding.get('condition') else '',
+                            placeholder="Access expires at end of 2024",
+                            key=f"iam_condition_description_{i}"
+                        )
+
+                # Parse data based on IAM type
+                if form_iam_type == "member":
+                    members_list = []
+                    condition = None
+                    if form_condition_title and form_condition_expression:
+                        condition = {
+                            "title": form_condition_title,
+                            "expression": form_condition_expression,
+                            "description": form_condition_description if form_condition_description else None
+                        }
+                elif form_iam_type == "binding":
+                    members_list = [m.strip() for m in form_members.split('\n') if m.strip()] if form_members else []
+                    condition = None
+                    if form_condition_title and form_condition_expression:
+                        condition = {
+                            "title": form_condition_title,
+                            "expression": form_condition_expression,
+                            "description": form_condition_description if form_condition_description else None
+                        }
+                elif form_iam_type == "policy":
+                    policy_data = form_policy_data if form_policy_data and form_policy_data.strip() else None
+                elif form_iam_type == "audit_config":
+                    try:
+                        audit_logs = json.loads(form_audit_logs) if form_audit_logs and form_audit_logs.strip() else []
+                    except json.JSONDecodeError:
+                        audit_logs = []
+
+                # Update IAM binding data
+                if form_iam_type == "member":
+                    st.session_state.iam[i] = {
+                        "iam_type": form_iam_type,
+                        "role": form_role,
+                        "member": form_member,
+                        "members": [],
+                        "policy_data": None,
+                        "service": None,
+                        "audit_log_configs": [],
+                        "condition": condition
+                    }
+                elif form_iam_type == "binding":
+                    st.session_state.iam[i] = {
+                        "iam_type": form_iam_type,
+                        "role": form_role,
+                        "member": None,
+                        "members": members_list,
+                        "policy_data": None,
+                        "service": None,
+                        "audit_log_configs": [],
+                        "condition": condition
+                    }
+                elif form_iam_type == "policy":
+                    st.session_state.iam[i] = {
+                        "iam_type": form_iam_type,
+                        "role": None,
+                        "member": None,
+                        "members": [],
+                        "policy_data": policy_data,
+                        "service": None,
+                        "audit_log_configs": [],
+                        "condition": None
+                    }
+                elif form_iam_type == "audit_config":
+                    st.session_state.iam[i] = {
+                        "iam_type": form_iam_type,
+                        "role": None,
+                        "member": None,
+                        "members": [],
+                        "policy_data": None,
+                        "service": form_service,
+                        "audit_log_configs": audit_logs,
+                        "condition": None
+                    }
+
+            # Add button to create another IAM policy
+            if st.button("➕ Add Another IAM Policy", key="add_iam_section"):
+                st.session_state.iam_form_count += 1
+                st.rerun()
+
+        # Always add IAM to resources if they exist (regardless of checkbox)
+        if st.session_state.get("iam"):
+            resources["iam"] = st.session_state.iam
+
+    with tab5:
+        st.markdown("### 🚀 Services & APIs")
+        st.markdown("Configure serverless services and application platforms")
+        st.markdown("---")
+
+        # Services resources will be placed here
+
+        # Cloud Functions
+        if st.checkbox("⚡ Create Cloud Functions"):
+            st.markdown("**Cloud Functions Configuration**")
+            if 'cloud_functions' not in st.session_state:
+                st.session_state.cloud_functions = []
+        
+            # Display existing functions
+            if st.session_state.get("cloud_functions"):
+                st.markdown("**Current Cloud Functions:**")
+                for i, func in enumerate(st.session_state.cloud_functions):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        st.text(f"Name: {func['name']}")
+                    with col2:
+                        st.text(f"Runtime: {func['runtime']}")
+                    with col3:
+                        if st.button("🗑️", key=f"del_cf_{i}"):
+                            st.session_state.cloud_functions.pop(i)
+                            st.rerun()
+        
+            # Add new function
+            st.markdown("**Add New Cloud Function:**")
+            col1, col2, col3 = st.columns([2, 2, 1])
+            with col1:
+                cf_name = st.text_input("Function Name", value="my-function", key="new_cf_name")
+            with col2:
+                cf_runtime = st.selectbox("Runtime", ["python311", "nodejs18", "go119"], key="new_cf_runtime")
+            with col3:
+                if st.button("➕ Add", key="add_cf"):
+                    if cf_name:
+                        new_cf = {
+                            "name": cf_name,
+                            "location": "us-central1",
+                            "runtime": cf_runtime,
+                            "entry_point": "main",
+                            "source_bucket": "my-bucket",
+                            "source_object": "functions/function.zip"
+                        }
+                        st.session_state.cloud_functions.append(new_cf)
+                        st.rerun()
+
+        # Always add Cloud Functions to resources if they exist (regardless of checkbox)
+        if st.session_state.get("cloud_functions"):
+            resources["cloud_functions"] = st.session_state.cloud_functions
+
+        # Artifact Registry
+        if st.checkbox("📦 Create Artifact Registry"):
+            st.markdown("**Artifact Registry Configuration**")
+            if 'artifact_repos' not in st.session_state:
+                st.session_state.artifact_repos = []
+        
+            # Display existing repos
+            if st.session_state.get("artifact_repos"):
+                st.markdown("**Current Artifact Repositories:**")
+                for i, repo in enumerate(st.session_state.artifact_repos):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    with col1:
+                        st.text(f"Name: {repo['name']}")
+                    with col2:
+                        st.text(f"Format: {repo['format']}")
+                    with col3:
+                        if st.button("🗑️", key=f"del_ar_{i}"):
+                            st.session_state.artifact_repos.pop(i)
+                            st.rerun()
+        
+            # Add new repo
+            st.markdown("**Add New Artifact Repository:**")
+            col1, col2, col3 = st.columns([2, 2, 1])
+            with col1:
+                ar_name = st.text_input("Repository Name", value="my-repo", key="new_ar_name")
+            with col2:
+                ar_format = st.selectbox("Format", ["DOCKER", "MAVEN", "NPM", "PYTHON"], key="new_ar_format")
+            with col3:
+                if st.button("➕ Add", key="add_ar"):
+                    if ar_name:
+                        new_ar = {
+                            "name": ar_name,
+                            "location": "us",
+                            "format": ar_format,
+                            "description": "Repository created via GUI"
+                        }
+                        st.session_state.artifact_repos.append(new_ar)
+                        st.rerun()
+
+        # Always add Artifact Repos to resources if they exist (regardless of checkbox)
+        if st.session_state.get("artifact_repos"):
+            resources["artifact_repos"] = st.session_state.artifact_repos
+
+        # Cloud Run Services
+        if st.checkbox("🚀 Create Cloud Run Services"):
+            if 'cloud_run_services' not in st.session_state:
+                st.session_state.cloud_run_services = []
+
+            # Initialize number of form sections
+            if 'cr_form_count' not in st.session_state:
+                st.session_state.cr_form_count = 1
+
+            # Display existing Cloud Run Services in a collapsible section
+            if st.session_state.get("cloud_run_services"):
+                with st.expander(f"📋 Current Cloud Run Services ({len(st.session_state.cloud_run_services)})", expanded=False):
+                    for idx, svc in enumerate(st.session_state.cloud_run_services):
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                        with col1:
+                            st.text(f"**{svc.get('name', 'unnamed')}**")
+                        with col2:
+                            st.text(f"Location: {svc.get('location', 'N/A')}")
+                        with col3:
+                            image = svc.get('image', 'N/A')
+                            if len(image) > 25:
+                                image = image[:25] + "..."
+                            st.text(f"Image: {image}")
+                        with col4:
+                            if st.button("🗑️", key=f"del_cr_list_{idx}"):
+                                st.session_state.cloud_run_services.pop(idx)
+                                if st.session_state.cr_form_count > 1:
+                                    st.session_state.cr_form_count -= 1
+                                st.rerun()
+                        if idx < len(st.session_state.cloud_run_services) - 1:
+                            st.markdown("---")
+
+            st.markdown("**Configure Cloud Run Service:**")
+            # Render form sections
+            for i in range(st.session_state.cr_form_count):
+                if i > 0:  # Add space between forms
+                    st.markdown("---")
+            
+                st.markdown(f"**Cloud Run Service {i+1}:**")
+            
+                # Get or create service data for this form
+                if i >= len(st.session_state.cloud_run_services):
+                    st.session_state.cloud_run_services.append({
+                        "name": f"my-service-{i+1}",
+                        "location": "us-central1",
+                        "image": "nginxinc/nginx-unprivileged:stable-alpine",
+                        "allow_unauthenticated": True
+                    })
+            
+                service = st.session_state.cloud_run_services[i]
+            
+                # Form fields for this service
                 col1, col2, col3 = st.columns([2, 2, 1])
                 with col1:
-                    st.text(f"Name: {connector['name']}")
+                    form_name = st.text_input("Service Name", value=service['name'], key=f"cr_name_{i}")
                 with col2:
-                    st.text(f"Region: {connector['region']}")
+                    form_location = st.selectbox("Location", ["us-central1", "us-west1", "europe-west1"], 
+                                               index=["us-central1", "us-west1", "europe-west1"].index(service['location']),
+                                               key=f"cr_location_{i}")
                 with col3:
-                    if st.button("🗑️", key=f"del_vpc_conn_{i}"):
-                        st.session_state.serverless_vpc_connectors.pop(i)
+                    if st.button("🗑️", key=f"del_cr_{i}"):
+                        # Remove this service and adjust form count
+                        st.session_state.cloud_run_services.pop(i)
+                        st.session_state.cr_form_count -= 1
                         st.rerun()
+            
+                form_image = st.text_input("Container Image", value=service['image'], key=f"cr_image_{i}")
+                form_auth = st.checkbox("Allow Unauthenticated", value=service['allow_unauthenticated'], key=f"cr_auth_{i}")
+            
+                # Update service data
+                st.session_state.cloud_run_services[i] = {
+                    "name": form_name,
+                    "location": form_location,
+                    "image": form_image,
+                    "allow_unauthenticated": form_auth
+                }
         
-        # Add new connector
-        st.markdown("**Add New VPC Connector:**")
-        col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-        with col1:
-            vpc_conn_name = st.text_input("Connector Name", value="my-connector", key="new_vpc_conn_name")
-        with col2:
-            vpc_conn_region = st.selectbox("Region", ["us-central1", "us-west1", "europe-west1"], key="new_vpc_conn_region")
-        with col3:
-            vpc_conn_cidr = st.text_input("CIDR Range", value="10.8.0.0/28", key="new_vpc_conn_cidr")
-        with col4:
-            if st.button("➕ Add", key="add_vpc_conn"):
-                if vpc_conn_name and vpc_conn_cidr:
-                    new_connector = {
-                        "name": vpc_conn_name,
-                        "region": vpc_conn_region,
-                        "network": "my-vpc",
-                        "ip_cidr_range": vpc_conn_cidr
-                    }
-                    st.session_state.serverless_vpc_connectors.append(new_connector)
-                    st.rerun()
+            # Add button to create new form section
+            if st.button("➕ Add Another Service", key="add_cr_service"):
+                st.session_state.cr_form_count += 1
+                st.rerun()
+
+        # Always add Cloud Run Services to resources if they exist (regardless of checkbox)
+        if st.session_state.get("cloud_run_services"):
+            resources["cloud_run_services"] = st.session_state.cloud_run_services
+
+        # Pub/Sub Topics
+        if st.checkbox("📢 Create Pub/Sub Topics"):
+            if 'pubsub_topics' not in st.session_state:
+                st.session_state.pubsub_topics = []
+
+            # Display existing topics in a collapsible section
+            if st.session_state.get("pubsub_topics"):
+                with st.expander(f"📋 Current Pub/Sub Topics ({len(st.session_state.pubsub_topics)})", expanded=False):
+                    for i, topic in enumerate(st.session_state.pubsub_topics):
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.text(f"**{topic['name']}**")
+                        with col2:
+                            if st.button("🗑️", key=f"del_topic_{i}"):
+                                st.session_state.pubsub_topics.pop(i)
+                                st.rerun()
+                        if i < len(st.session_state.pubsub_topics) - 1:
+                            st.markdown("---")
+
+            # Add new topic
+            st.markdown("**Add New Pub/Sub Topic:**")
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                topic_name = st.text_input("Topic Name", value="my-topic", key="new_topic_name")
+            with col2:
+                if st.button("➕ Add", key="add_topic"):
+                    if topic_name:
+                        new_topic = {
+                            "name": topic_name,
+                            "labels": {"created_by": "gui"}
+                        }
+                        st.session_state.pubsub_topics.append(new_topic)
+                        st.rerun()
+
+        # Always add Pub/Sub Topics to resources if they exist (regardless of checkbox)
+        if st.session_state.get("pubsub_topics"):
+            resources["pubsub_topics"] = st.session_state.pubsub_topics
+
+    # TAB 6: OTHER RESOURCES
+    with tab6:
+        st.markdown("### ⚙️ Other Resources")
+        st.markdown("Configure DNS, monitoring, and other services")
+        st.markdown("---")
+
+        # Other resources will be placed here
+
+        # Cloud DNS Zones
+        if st.checkbox("🌐 Create Cloud DNS Zones"):
+            st.markdown("**Cloud DNS Configuration**")
+            if 'dns_zones' not in st.session_state:
+                st.session_state.dns_zones = []
         
-        if st.session_state.serverless_vpc_connectors:
-            resources["serverless_vpc_connectors"] = st.session_state.serverless_vpc_connectors
-    
+            # Display existing zones
+            if st.session_state.get("dns_zones"):
+                st.markdown("**Current DNS Zones:**")
+                for i, zone in enumerate(st.session_state.dns_zones):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.text(f"Name: {zone['name']} ({zone['dns_name']})")
+                    with col2:
+                        if st.button("🗑️", key=f"del_dns_{i}"):
+                            st.session_state.dns_zones.pop(i)
+                            st.rerun()
+        
+            # Add new zone
+            st.markdown("**Add New DNS Zone:**")
+            col1, col2, col3 = st.columns([2, 2, 1])
+            with col1:
+                dns_name = st.text_input("Zone Name", value="my-zone", key="new_dns_name")
+            with col2:
+                dns_domain = st.text_input("DNS Name", value="example.com.", key="new_dns_domain")
+            with col3:
+                if st.button("➕ Add", key="add_dns"):
+                    if dns_name and dns_domain:
+                        new_dns = {
+                            "name": dns_name,
+                            "dns_name": dns_domain,
+                            "description": "DNS zone created via GUI"
+                        }
+                        st.session_state.dns_zones.append(new_dns)
+                        st.rerun()
+
+        # Always add DNS Zones to resources if they exist (regardless of checkbox)
+        if st.session_state.get("dns_zones"):
+            resources["dns_zones"] = st.session_state.dns_zones
+
+
     # Only include VPCs/Subnets if their checkboxes are checked
     # (removed fallback that included them even when unchecked)
 
@@ -4024,21 +4702,69 @@ def project_builder():
         if not project_id:
             st.error("Please fill in Project ID")
             return
-        
+
         from collections import OrderedDict
-        
+
         # Create ordered dictionary with specific order
         config = OrderedDict()
         config["project_id"] = project_id
         if billing_account:  # Only include billing_account if provided
             config["billing_account"] = billing_account
         config["labels"] = labels
-        config["apis"] = selected_apis
+        config["apis"] = st.session_state.get("selected_apis", [])
         if organization_id:
             config["organization_id"] = organization_id
-        # Use only current resources (checkbox-controlled)
-        config["resources"] = resources
-        
+
+        # Build resources from session state regardless of checkbox state
+        # This ensures all configured resources are included even if checkboxes are unchecked
+        resources_from_state = {}
+        if st.session_state.get("vpcs"):
+            resources_from_state["vpcs"] = st.session_state.vpcs
+        if st.session_state.get("subnets"):
+            resources_from_state["subnets"] = st.session_state.subnets
+        if st.session_state.get("firewall_rules"):
+            resources_from_state["firewall_rules"] = st.session_state.firewall_rules
+        if st.session_state.get("service_accounts"):
+            resources_from_state["service_accounts"] = st.session_state.service_accounts
+        if st.session_state.get("iam"):
+            resources_from_state["iam"] = st.session_state.iam
+        if st.session_state.get("compute_instances"):
+            resources_from_state["compute_instances"] = st.session_state.compute_instances
+        if st.session_state.get("storage_buckets"):
+            resources_from_state["storage_buckets"] = st.session_state.storage_buckets
+        if st.session_state.get("pubsub_topics"):
+            resources_from_state["pubsub_topics"] = st.session_state.pubsub_topics
+        if st.session_state.get("cloud_run_services"):
+            resources_from_state["cloud_run_services"] = st.session_state.cloud_run_services
+        if st.session_state.get("cloud_sql_instances"):
+            resources_from_state["cloud_sql_instances"] = st.session_state.cloud_sql_instances
+        if st.session_state.get("artifact_repos"):
+            resources_from_state["artifact_repos"] = st.session_state.artifact_repos
+        if st.session_state.get("secrets"):
+            resources_from_state["secrets"] = st.session_state.secrets
+        if st.session_state.get("dns_zones"):
+            resources_from_state["dns_zones"] = st.session_state.dns_zones
+        if st.session_state.get("bigquery_datasets"):
+            resources_from_state["bigquery_datasets"] = st.session_state.bigquery_datasets
+        if st.session_state.get("cloud_functions"):
+            resources_from_state["cloud_functions"] = st.session_state.cloud_functions
+        if st.session_state.get("static_ips"):
+            resources_from_state["static_ips"] = st.session_state.static_ips
+        if st.session_state.get("disks"):
+            resources_from_state["disks"] = st.session_state.disks
+        if st.session_state.get("redis_instances"):
+            resources_from_state["redis_instances"] = st.session_state.redis_instances
+        if st.session_state.get("serverless_vpc_connectors"):
+            resources_from_state["serverless_vpc_connectors"] = st.session_state.serverless_vpc_connectors
+        if st.session_state.get("gke_clusters"):
+            resources_from_state["gke_clusters"] = st.session_state.gke_clusters
+        if st.session_state.get("cloud_routers"):
+            resources_from_state["cloud_routers"] = st.session_state.cloud_routers
+        if st.session_state.get("cloud_nats"):
+            resources_from_state["cloud_nats"] = st.session_state.cloud_nats
+
+        config["resources"] = resources_from_state
+
         # Function to clean null values from nested dictionaries
         def clean_null_values(obj):
             if isinstance(obj, dict):
@@ -4104,9 +4830,59 @@ def project_builder():
             config["organization_id"] = organization_id
         if labels and isinstance(labels, dict):
             config["labels"] = labels
-        if selected_apis:
-            config["apis"] = selected_apis
-        config["resources"] = resources or {}
+        # Always use APIs from session state (regardless of checkbox state)
+        if st.session_state.get("selected_apis"):
+            config["apis"] = st.session_state.selected_apis
+
+        # Build resources from session state regardless of checkbox state
+        # This ensures all configured resources are included even if checkboxes are unchecked
+        resources_from_state = {}
+        if st.session_state.get("vpcs"):
+            resources_from_state["vpcs"] = st.session_state.vpcs
+        if st.session_state.get("subnets"):
+            resources_from_state["subnets"] = st.session_state.subnets
+        if st.session_state.get("firewall_rules"):
+            resources_from_state["firewall_rules"] = st.session_state.firewall_rules
+        if st.session_state.get("service_accounts"):
+            resources_from_state["service_accounts"] = st.session_state.service_accounts
+        if st.session_state.get("iam"):
+            resources_from_state["iam"] = st.session_state.iam
+        if st.session_state.get("compute_instances"):
+            resources_from_state["compute_instances"] = st.session_state.compute_instances
+        if st.session_state.get("storage_buckets"):
+            resources_from_state["storage_buckets"] = st.session_state.storage_buckets
+        if st.session_state.get("pubsub_topics"):
+            resources_from_state["pubsub_topics"] = st.session_state.pubsub_topics
+        if st.session_state.get("cloud_run_services"):
+            resources_from_state["cloud_run_services"] = st.session_state.cloud_run_services
+        if st.session_state.get("cloud_sql_instances"):
+            resources_from_state["cloud_sql_instances"] = st.session_state.cloud_sql_instances
+        if st.session_state.get("artifact_repos"):
+            resources_from_state["artifact_repos"] = st.session_state.artifact_repos
+        if st.session_state.get("secrets"):
+            resources_from_state["secrets"] = st.session_state.secrets
+        if st.session_state.get("dns_zones"):
+            resources_from_state["dns_zones"] = st.session_state.dns_zones
+        if st.session_state.get("bigquery_datasets"):
+            resources_from_state["bigquery_datasets"] = st.session_state.bigquery_datasets
+        if st.session_state.get("cloud_functions"):
+            resources_from_state["cloud_functions"] = st.session_state.cloud_functions
+        if st.session_state.get("static_ips"):
+            resources_from_state["static_ips"] = st.session_state.static_ips
+        if st.session_state.get("disks"):
+            resources_from_state["disks"] = st.session_state.disks
+        if st.session_state.get("redis_instances"):
+            resources_from_state["redis_instances"] = st.session_state.redis_instances
+        if st.session_state.get("serverless_vpc_connectors"):
+            resources_from_state["serverless_vpc_connectors"] = st.session_state.serverless_vpc_connectors
+        if st.session_state.get("gke_clusters"):
+            resources_from_state["gke_clusters"] = st.session_state.gke_clusters
+        if st.session_state.get("cloud_routers"):
+            resources_from_state["cloud_routers"] = st.session_state.cloud_routers
+        if st.session_state.get("cloud_nats"):
+            resources_from_state["cloud_nats"] = st.session_state.cloud_nats
+
+        config["resources"] = resources_from_state
 
         # Clean helper (match YAML flow)
         def clean_null_values(obj):

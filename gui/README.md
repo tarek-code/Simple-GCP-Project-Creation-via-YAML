@@ -17,6 +17,9 @@ cd gui
 pip install -r requirements.txt
 ```
 
+<!-- # 2. Activate it
+source venv/bin/activate -->
+
 2. Run the application:
 ```bash
 streamlit run streamlit_app.py
